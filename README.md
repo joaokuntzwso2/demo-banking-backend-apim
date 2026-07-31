@@ -1,243 +1,474 @@
-# Digital Banking Platform Demo
+# Digital Banking Backend and API Management Demo
 
-A maintainable Node.js backend and OpenAPI 3.0 contract set for a digital banking demonstration through **WSO2 API Manager 4.7**. The sample customers, GTQ/USD products, payment rails, addresses, and remittance flows are based on a realistic banking scenario in Guatemala, while all API, service, container, and fictional institution names remain generic.
+A self-contained banking API demonstration built with Node.js and WSO2 API Manager 4.7.
 
-The service is intentionally self-contained and uses deterministic in-memory state. It can run as:
+The repository provides:
 
-1. A direct backend behind WSO2 API Manager 4.7; or
-2. A replacement/extension for the `banking-backend-js` layer in the existing `demo-banking` repository.
+* A JavaScript/Node.js banking backend.
+* In-memory banking data and workflows.
+* Docker packaging for the backend.
+* WSO2 API Manager 4.7 running through Docker Compose.
+* Eight OpenAPI contracts separated by business context.
+* Mock customer, account, card, beneficiary, transfer, remittance, and compliance data.
 
-All customer names, banks, identifiers, policy thresholds, rates, and transactions are fictional.
+This repository is intended for local demonstrations, technical workshops, API management evaluations, and integration testing.
 
-## Deliverables
+## Important notice
 
-- Node.js/Express backend with domain services and an in-memory repository.
-- Aggregate OpenAPI 3.0.3 source plus eight standalone context contracts with operation IDs, schemas, examples, OAuth2 scopes, ETags, idempotency headers, and problem details.
-- GET, POST, PUT, and PATCH scenarios.
-- Dockerfile and Docker Compose packaging.
-- Automated domain tests and executable cURL demo flow.
-- APIM 4.7 deployment guidance.
+This project:
 
-## Start
+* Uses fictional and simulated data.
+* Does not connect to a real core banking system.
+* Does not persist backend data after the backend container is restarted.
+* Is not intended for production use.
+* Should not be exposed directly to the internet.
+* Uses local demonstration credentials and self-signed certificates.
 
-```bash
-cp -n .env.example .env
-docker compose down --remove-orphans
-docker compose up --build -d
-docker compose ps
-curl http://localhost:8080/health
+The financial rules, limits, exchange rates, customer records, institutions, and transaction data are demonstration values only.
+
+## Architecture
+
+The environment contains two main runtime components:
+
+```text
+API consumer
+     |
+     v
+WSO2 API Manager 4.7
+     |
+     | Docker network
+     v
+Node.js banking backend
+     |
+     v
+In-memory banking data
 ```
 
-Follow startup logs when the service is not healthy:
+When both components run through Docker Compose, API Manager reaches the backend using:
+
+```text
+http://banking-backend:8080
+```
+
+From the host machine, the backend is available at:
+
+```text
+http://localhost:8080
+```
+
+## Requirements
+
+The complete environment requires:
+
+* Docker
+* Docker Compose
+* At least 4 CPU cores allocated to Docker
+* At least 8 GB of memory allocated to Docker
+
+Node.js is only required when running or testing the backend outside Docker.
+
+## Start the complete environment
+
+Run the following command from the repository root:
+
+```bash
+docker compose up --build -d
+```
+
+Check the container status:
+
+```bash
+docker compose ps
+```
+
+Follow all logs:
+
+```bash
+docker compose logs -f
+```
+
+Follow only the backend logs:
 
 ```bash
 docker compose logs -f banking-backend
 ```
 
-Collect a complete local diagnostic report with:
+Follow only the API Manager logs:
 
 ```bash
-./scripts/diagnose.sh
+docker compose logs -f wso2-apim
 ```
 
-Verify that APIM can resolve the Docker backend endpoint:
+API Manager can take several minutes to complete its first startup.
+
+## Local service addresses
+
+### Banking backend
+
+```text
+http://localhost:8080
+```
+
+Health endpoint:
+
+```text
+http://localhost:8080/health
+```
+
+Swagger UI:
+
+```text
+http://localhost:8080/docs
+```
+
+Aggregate OpenAPI definition:
+
+```text
+http://localhost:8080/openapi
+```
+
+### WSO2 API Manager
+
+Publisher:
+
+```text
+https://localhost:9443/publisher
+```
+
+Developer Portal:
+
+```text
+https://localhost:9443/devportal
+```
+
+Administration Portal:
+
+```text
+https://localhost:9443/admin
+```
+
+HTTPS Gateway:
+
+```text
+https://localhost:8243
+```
+
+HTTP Gateway:
+
+```text
+http://localhost:8280
+```
+
+Default credentials for the local demonstration:
+
+```text
+Username: admin
+Password: admin
+```
+
+The browser may display a certificate warning because the local API Manager environment uses a self-signed certificate.
+
+## Verify the backend
+
+From the host machine:
 
 ```bash
-./scripts/verify-apim-backend.sh
+curl --fail http://localhost:8080/health
 ```
 
-Interactive documentation and contracts:
-
-- Aggregate Swagger UI: `http://localhost:8080/docs`
-- Contract catalog: `http://localhost:8080/openapi`
-- Aggregate contract: `http://localhost:8080/openapi.yaml`
-- Context contract example: `http://localhost:8080/openapi/transfers.yaml`
-
-The contract files intentionally declare the Docker-network backend `http://banking-backend:8080` for APIM import. Invoke the backend directly from the host with `http://localhost:8080`, or invoke it through the APIM gateway after deployment.
-
-Run the complete scenario after the health endpoint reports `UP`:
+Verify that API Manager can reach the backend through the Docker network:
 
 ```bash
-./scripts/demo.sh
+docker compose exec wso2-apim \
+  curl --fail http://banking-backend:8080/health
 ```
 
-Reset at any time:
+A successful response confirms that both containers are connected correctly.
+
+## Import the APIs into API Manager
+
+Import only the eight YAML files located under:
+
+```text
+openapi/apim-import/
+```
+
+The importable contracts are:
+
+```text
+account-management-api.yaml
+beneficiary-management-api.yaml
+card-controls-api.yaml
+compliance-case-api.yaml
+customer-profile-api.yaml
+family-remittance-api.yaml
+operations-api.yaml
+transfer-processing-api.yaml
+```
+
+Do not import the following files:
+
+```text
+openapi/banking-platform-api.yaml
+openapi/context-catalog.json
+```
+
+`banking-platform-api.yaml` is the aggregate API definition used for local documentation.
+
+`context-catalog.json` is metadata used to describe the available API contexts. It is not an OpenAPI definition.
+
+### Import procedure
+
+1. Open the API Publisher.
+2. Sign in with the local administrator credentials.
+3. Create an API by importing an OpenAPI definition.
+4. Select one YAML file from `openapi/apim-import/`.
+5. Review the generated API resources.
+6. Confirm the production endpoint.
+7. Create and deploy a revision.
+8. Publish the API.
+9. Repeat the process for the remaining context contracts.
+
+When API Manager and the backend run through the same Docker Compose environment, the endpoint must remain:
+
+```text
+http://banking-backend:8080
+```
+
+Do not replace it with `localhost` when API Manager is running inside Docker. Inside the API Manager container, `localhost` refers to API Manager itself.
+
+## Running API Manager outside Docker
+
+When the backend runs through Docker but API Manager runs directly on the host machine, change the production and sandbox endpoint in each imported contract from:
+
+```text
+http://banking-backend:8080
+```
+
+to:
+
+```text
+http://localhost:8080
+```
+
+The exact address must match the host port configured for the backend in `docker-compose.yml`.
+
+## Running only the backend
+
+Install the backend dependencies:
 
 ```bash
-curl -X POST http://localhost:8080/admin/reset
+npm --prefix backend ci
 ```
 
-## Architecture
-
-```mermaid
-flowchart LR
-  C[Mobile, web, corporate clients] -->|OAuth2 token| A[WSO2 API Manager 4.7]
-  A -->|Scope checks, throttling, mediation| B[Digital Banking Backend]
-  B --> R[In-memory repository]
-  B --> T[Transfer state machine]
-  B --> M[Remittance state machine]
-  B --> K[Compliance workflow]
-  T --> R
-  M --> R
-  K --> T
-  K --> M
-```
-
-The original repository routes browser and agent traffic through APIM, then Micro Integrator, and finally a JavaScript mock core-banking backend. This implementation preserves the mock-core responsibility but allows direct APIM exposure because the requested scope is backend plus OpenAPI only. An MI mediation layer can still be inserted without changing the contract.
-
-See [Architecture and engineering decisions](docs/ARCHITECTURE.md).
-
-## Domain capabilities
-
-| Domain | Capabilities |
-|---|---|
-| Customers | Read and partially update contact/profile data using `PATCH` + `If-Match` |
-| Accounts | GTQ/USD balances, standardized masked identifiers, ledger entries, mutable limits |
-| Beneficiaries | Internal, domestic external, and regional external; create with `POST`, replace with `PUT` |
-| Cards | Read status and modify block/channel controls with `PATCH` |
-| Transfers | Internal, CCA, LBTR, and SIPA; fund holds, limits, maker-checker, compliance, settlement, rejection, cancellation, return |
-| Remittances | USD-to-GTQ quote, registration, duplicate protection, compliance review, account-credit payout |
-| Compliance | Manual/automatic cases, assignment, notes, resolution, atomic linked-workflow advancement |
-| Administration | Deterministic snapshot and reset for repeatable demonstrations |
-
-## Key endpoints
-
-| Method | Path | Purpose |
-|---|---|---|
-| GET / PATCH | `/v1/customers/{customerId}` | Read or update a customer |
-| GET | `/v1/customers/{customerId}/accounts` | List customer accounts |
-| GET / POST | `/v1/customers/{customerId}/beneficiaries` | List or create beneficiaries |
-| PUT | `/v1/customers/{customerId}/beneficiaries/{beneficiaryId}` | Fully replace a beneficiary |
-| GET | `/v1/accounts/{accountId}` | Read balances and limits |
-| PATCH | `/v1/accounts/{accountId}/limits` | Change account limits |
-| GET / PATCH | `/v1/cards/{cardId}` | Read or update card controls |
-| GET / POST | `/v1/transfers` | Search or initiate transfers |
-| GET / PATCH | `/v1/transfers/{transferId}` | Read or advance a transfer workflow |
-| POST | `/v1/remittances/quotes` | Create a time-limited remittance quote |
-| GET / POST | `/v1/remittances` | Search or register remittances |
-| GET / PATCH | `/v1/remittances/{remittanceId}` | Read or operate a remittance |
-| GET / POST | `/v1/compliance/cases` | Search or open cases |
-| GET / PATCH | `/v1/compliance/cases/{caseId}` | Read or operate a case |
-
-The aggregate source is [openapi/banking-platform-api.yaml](openapi/banking-platform-api.yaml). The independently importable contracts and their APIM contexts are listed in [openapi/README.md](openapi/README.md).
-
-## Seed data
-
-| ID | Role |
-|---|---|
-| `CUS-GT-001` | Retail customer with GTQ/USD accounts, card, domestic/internal/regional beneficiaries |
-| `CUS-GT-002` | Retail customer in Quetzaltenango |
-| `CUS-GT-003` | Business customer with enhanced due diligence and high demo risk rating |
-| `ACC-GTQ-001` | Retail GTQ monetary account |
-| `ACC-USD-001` | Retail USD savings account for SIPA demo |
-| `ACC-GTQ-003` | Business GTQ account for high-value/compliance demo |
-| `BEN-GT-001` | Domestic external GTQ beneficiary |
-| `BEN-GT-002` | Internal GTQ beneficiary |
-| `BEN-GT-004` | Regional USD beneficiary in El Salvador |
-| `BEN-GT-005` | Business domestic supplier beneficiary |
-| `CARD-GT-001` | Retail debit card with mutable controls |
-
-## Concurrency and safe mutation
-
-Mutable resources return an `ETag` such as `"2"`. Clients must send that value in `If-Match` for `PUT` and `PATCH`:
+Run the tests:
 
 ```bash
-curl -i http://localhost:8080/v1/cards/CARD-GT-001
-
-curl -X PATCH http://localhost:8080/v1/cards/CARD-GT-001 \
-  -H 'If-Match: "1"' \
-  -H 'Content-Type: application/json' \
-  -d '{"controls":{"internationalEnabled":true}}'
+npm --prefix backend test
 ```
 
-A stale version returns `412 VERSION_MISMATCH`. Missing `If-Match` returns `428 IF_MATCH_REQUIRED`.
-
-Transfer and remittance creation require `Idempotency-Key`. Replaying the same body returns the original resource; reusing the key with a different body returns `409 IDEMPOTENCY_KEY_REUSED`.
-
-## Demo policy configuration
-
-The following values are configurable in `.env`:
-
-```dotenv
-MAKER_CHECKER_THRESHOLD_GTQ=25000
-AML_REVIEW_THRESHOLD_GTQ=50000
-BENEFICIARY_COOLING_HOURS=24
-REMITTANCE_REVIEW_THRESHOLD_USD=2000
-REMITTANCE_QUOTE_TTL_MINUTES=10
-USD_TO_GTQ_RATE=7.75
-REMITTANCE_FEE_USD=4.99
-```
-
-These are **fictional demo controls**, not statements of Guatemalan law, central-bank operating rules, reporting thresholds, or bank policy.
-
-## WSO2 API Manager 4.7
-
-See [APIM setup](docs/APIM-SETUP.md). Import the eight context contracts as separate APIs. Each uses version `1.0.0` and the same production endpoint on the shared Docker network: `http://banking-backend:8080`.
-
-The contracts already contain WSO2 endpoint extensions and generic base paths. Do not replace the Docker endpoint with `localhost:8080`; `localhost` inside the APIM container refers to APIM itself. Previously imported country-prefixed APIs should be recreated from the new contracts so their API names, contexts, endpoint configuration, and deployed revisions are all clean.
-
-The backend intentionally does not parse or validate OAuth tokens. APIM should enforce authentication, subscriptions, application/API keys as appropriate, scopes, throttling, CORS, and security mediation.
-
-## Development
+Start the backend:
 
 ```bash
-cd backend
-npm install
-npm test
-npm start
+npm --prefix backend start
 ```
 
-Runtime requirement: Node.js 20 or later. The Docker image uses Node.js 22 Alpine and runs as a non-root user with dropped Linux capabilities and a read-only root filesystem in Compose.
+The backend will normally be available at:
 
-Tests use Node's built-in test runner and do not depend on a live HTTP server:
+```text
+http://localhost:8080
+```
+
+The OpenAPI definitions must remain available to the backend under the repository-level `openapi` directory.
+
+## Stop the environment
+
+Stop the containers while preserving API Manager data:
 
 ```bash
-cd backend
-node --test
+docker compose down
 ```
 
-## Repository layout
+Start them again:
+
+```bash
+docker compose up -d
+```
+
+## Reset the complete environment
+
+The following command removes the containers, API Manager database, imported APIs, applications, subscriptions, and Docker volumes:
+
+```bash
+docker compose down -v --remove-orphans
+```
+
+Recreate the environment:
+
+```bash
+docker compose up --build -d
+```
+
+This is destructive and should only be used when a complete local reset is required.
+
+## Repository structure
 
 ```text
 .
-├── backend/
-│   ├── src/
-│   │   ├── data/             # deterministic fictional seed
-│   │   ├── domain/           # explicit workflow state machines
-│   │   ├── middleware/       # context, logs, problem details
-│   │   ├── repositories/     # transactional in-memory store
-│   │   ├── routes/           # HTTP adapters only
-│   │   ├── services/         # business use cases
-│   │   └── utils/            # money, validation, HTTP, idempotency
-│   ├── scripts/          # contract generation and validation
-│   ├── test/
-│   ├── openapi/          # runtime copies of aggregate and context contracts
-│   └── Dockerfile
-├── docs/
-├── openapi/              # source contract, split contracts, and context catalog
-├── scripts/
+├── README.md
+├── backend
+│   ├── Dockerfile
+│   ├── package-lock.json
+│   ├── package.json
+│   ├── src
+│   │   ├── app.js
+│   │   ├── config.js
+│   │   ├── container.js
+│   │   ├── data
+│   │   ├── domain
+│   │   ├── middleware
+│   │   ├── repositories
+│   │   ├── routes
+│   │   ├── services
+│   │   ├── utils
+│   │   ├── errors.js
+│   │   ├── openapi-registry.js
+│   │   └── server.js
+│   └── test
+│       ├── domain-flows.test.js
+│       ├── module-paths.test.js
+│       └── money.test.js
 ├── docker-compose.yml
-└── .env.example
+└── openapi
+    ├── apim-import
+    │   ├── account-management-api.yaml
+    │   ├── beneficiary-management-api.yaml
+    │   ├── card-controls-api.yaml
+    │   ├── compliance-case-api.yaml
+    │   ├── customer-profile-api.yaml
+    │   ├── family-remittance-api.yaml
+    │   ├── operations-api.yaml
+    │   └── transfer-processing-api.yaml
+    ├── banking-platform-api.yaml
+    └── context-catalog.json
 ```
 
-## Important limitations
+## Banking capabilities
 
-This is a demonstration backend, not production core-banking software:
+The backend demonstrates the following capabilities:
 
-- State is local to one process and disappears on restart/reset.
-- It is not horizontally scalable because the store is not shared.
-- Transactions are synchronous in-process rollback snapshots, not database ACID transactions.
-- CCA, LBTR, and SIPA settlement is simulated; no external network is contacted.
-- Exchange rates, fees, verification, sanctions, AML, fraud, signatures, and regulatory reporting are simplified.
-- Authentication and authorization are delegated to APIM for the demo.
-- Account and identity values are masked fictional data.
+* Customer profile retrieval and maintenance.
+* Account portfolio and balance queries.
+* Account transaction history.
+* Transfer-limit maintenance.
+* Beneficiary registration and replacement.
+* Card inventory and card controls.
+* Internal transfers.
+* Domestic clearing transfers.
+* High-value transfers.
+* Regional transfers.
+* Transfer approval and rejection.
+* Incoming remittance quotes and registration.
+* Remittance review and payout.
+* Compliance-case review and resolution.
+* Idempotent payment requests.
+* Resource versioning using ETags.
+* Optimistic concurrency using `If-Match`.
+* Correlation identifiers.
+* Structured request logging.
+* Deterministic in-memory data reset.
 
-A production evolution should introduce a durable database, outbox/event publication, external payment adapters, HSM-backed signing, real customer-consent and entitlement checks, reconciliation, immutable audit storage, observability, secrets management, and disaster-recovery design.
+The scenario uses GTQ and USD and includes payment and remittance behavior representative of a Central American banking environment.
 
-## References used for scenario grounding
+## Data persistence
 
-- Original demo repository: https://github.com/joaokuntzwso2/demo-banking/
-- Banco de Guatemala payment systems: https://banguat.gob.gt/page/sistemas-de-pago
-- Banco de Guatemala account standardization: https://banguat.gob.gt/page/estandarizacion-de-cuentas
-- Banco de Guatemala family remittances: https://banguat.gob.gt/page/remesas-familiares-0
-- WSO2 APIM OpenAPI import documentation: https://apim.docs.wso2.com/en/latest/api-design-manage/design/create-api/create-rest-api/create-a-rest-api-from-an-openapi-definition/
+The backend uses in-memory storage.
+
+Backend data is reset whenever:
+
+* The backend container is restarted.
+* The backend process is restarted.
+* The administrative reset operation is executed.
+
+API Manager data is stored in Docker volumes and survives a normal:
+
+```bash
+docker compose down
+```
+
+API Manager data is deleted by:
+
+```bash
+docker compose down -v
+```
+
+## Security considerations
+
+This is a demonstration environment.
+
+The backend does not independently enforce production-grade authentication or authorization. API security should be applied through API Manager for the demonstration.
+
+The environment should only be executed on a trusted local machine.
+
+Do not:
+
+* Expose the backend directly to the internet.
+* Use the default API Manager credentials in a shared environment.
+* Use the mock data as real customer information.
+* Treat HTTP headers supplied by clients as trusted user identity.
+* Use the in-memory repository as a production datastore.
+* Use the bundled self-signed certificates in production.
+* Store real credentials, tokens, customer records, or private keys in the repository.
+
+## Troubleshooting
+
+### Backend build cannot find `openapi`
+
+The Docker build context must be the repository root.
+
+The backend service in `docker-compose.yml` should use:
+
+```yaml
+build:
+  context: .
+  dockerfile: backend/Dockerfile
+```
+
+The backend Dockerfile should copy the contracts using:
+
+```dockerfile
+COPY openapi ./openapi
+```
+
+### API Manager returns a backend connection error
+
+Confirm that the imported API endpoint is:
+
+```text
+http://banking-backend:8080
+```
+
+Verify connectivity:
+
+```bash
+docker compose exec wso2-apim \
+  curl --fail http://banking-backend:8080/health
+```
+
+If the API was previously deployed with an incorrect endpoint, update the endpoint, create a new revision, and deploy that revision to the gateway.
+
+### API Manager reports a duplicated scope
+
+Import only the context-specific contracts under `openapi/apim-import/`.
+
+Do not import the aggregate contract together with the split contracts.
+
+Delete any failed or duplicate API drafts before importing a corrected contract.
+
+### API Manager rejects `context-catalog.json`
+
+This is expected. `context-catalog.json` is not an OpenAPI document and must not be imported.
+
+### Browser reports an untrusted certificate
+
+The local API Manager environment uses a self-signed certificate. The warning is expected for local demonstrations.
