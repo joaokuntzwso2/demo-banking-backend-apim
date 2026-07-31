@@ -1,0 +1,227 @@
+openapi: 3.0.3
+info:
+  title: Banking Operations API
+  version: 1.0.0
+  description: >-
+    Health checks and deterministic demo administration operations.
+
+
+    This is a standalone context contract for WSO2 API Manager 4.7. All data and policy values are fictional and
+    intended only for demonstrations.
+  contact:
+    name: Demo Banking Engineering Team
+  license:
+    name: Apache-2.0
+servers:
+  - url: http://banking-backend:8080
+    description: Docker Compose backend service
+x-wso2-basePath: /banking-operations/1.0.0
+x-wso2-production-endpoints:
+  urls:
+    - http://banking-backend:8080
+  type: http
+x-wso2-sandbox-endpoints:
+  urls:
+    - http://banking-backend:8080
+  type: http
+tags:
+  - name: Health
+  - name: Administration
+paths:
+  /health:
+    get:
+      tags:
+        - Health
+      operationId: getHealth
+      summary: Check service health
+      security: []
+      responses:
+        "200":
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+  /admin/snapshot:
+    get:
+      tags:
+        - Administration
+      operationId: getDemoSnapshot
+      summary: Return counts for the current in-memory state
+      security:
+        - OAuth2:
+            - banking.operations.admin
+      responses:
+        "200":
+          $ref: "#/components/responses/SnapshotResponse"
+        default:
+          $ref: "#/components/responses/ProblemResponse"
+  /admin/reset:
+    post:
+      tags:
+        - Administration
+      operationId: resetDemoState
+      summary: Reset the service to its original seed data
+      description: Intended only for deterministic demo setup and automated tests.
+      security:
+        - OAuth2:
+            - banking.operations.admin
+      responses:
+        "200":
+          description: State reset
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/EnvelopeBase"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required:
+                          - reset
+                          - snapshot
+                        properties:
+                          reset:
+                            type: boolean
+                          snapshot:
+                            $ref: "#/components/schemas/Snapshot"
+        default:
+          $ref: "#/components/responses/ProblemResponse"
+security:
+  - OAuth2: []
+components:
+  responses:
+    ProblemResponse:
+      description: Error represented as an RFC 9457-style problem detail
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    SnapshotResponse:
+      description: Current in-memory entity counts
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: "#/components/schemas/EnvelopeBase"
+              - type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/Snapshot"
+  schemas:
+    EnvelopeBase:
+      type: object
+      required:
+        - data
+        - meta
+      properties:
+        data: {}
+        meta:
+          $ref: "#/components/schemas/Metadata"
+    HealthResponse:
+      type: object
+      required:
+        - status
+        - service
+        - version
+        - storage
+        - snapshot
+        - timestamp
+      properties:
+        status:
+          type: string
+          enum:
+            - UP
+        service:
+          type: string
+        version:
+          type: string
+        storage:
+          type: string
+          enum:
+            - in-memory
+        snapshot:
+          $ref: "#/components/schemas/Snapshot"
+        timestamp:
+          type: string
+          format: date-time
+    Metadata:
+      type: object
+      required:
+        - correlationId
+      properties:
+        correlationId:
+          type: string
+          format: uuid
+        fapiInteractionId:
+          type: string
+        count:
+          type: integer
+        replayed:
+          type: boolean
+    Problem:
+      type: object
+      required:
+        - type
+        - title
+        - status
+        - detail
+        - code
+        - correlationId
+      properties:
+        type:
+          type: string
+          format: uri
+        title:
+          type: string
+        status:
+          type: integer
+        detail:
+          type: string
+        instance:
+          type: string
+        code:
+          type: string
+        correlationId:
+          type: string
+        errors:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+    Snapshot:
+      type: object
+      additionalProperties:
+        type: integer
+      properties:
+        customers:
+          type: integer
+        accounts:
+          type: integer
+        beneficiaries:
+          type: integer
+        cards:
+          type: integer
+        transfers:
+          type: integer
+        activeHolds:
+          type: integer
+        ledgerEntries:
+          type: integer
+        remittances:
+          type: integer
+        complianceCases:
+          type: integer
+        auditEvents:
+          type: integer
+  securitySchemes:
+    OAuth2:
+      type: oauth2
+      description: OAuth2 token validation and scope enforcement are performed by WSO2 API Manager.
+      flows:
+        clientCredentials:
+          tokenUrl: https://localhost:9443/oauth2/token
+          scopes:
+            banking.operations.admin: Reset and inspect demo state
+x-demo-apim-context: /banking-operations

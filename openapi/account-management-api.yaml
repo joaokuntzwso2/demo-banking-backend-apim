@@ -1,0 +1,374 @@
+openapi: 3.0.3
+info:
+  title: Account Management API
+  version: 1.0.0
+  description: >-
+    Customer account portfolio, balances, ledger entries, and transfer-limit maintenance.
+
+
+    This is a standalone context contract for WSO2 API Manager 4.7. All data and policy values are fictional and
+    intended only for demonstrations.
+  contact:
+    name: Demo Banking Engineering Team
+  license:
+    name: Apache-2.0
+servers:
+  - url: http://banking-backend:8080
+    description: Docker Compose backend service
+x-wso2-basePath: /account-management/1.0.0
+x-wso2-production-endpoints:
+  urls:
+    - http://banking-backend:8080
+  type: http
+x-wso2-sandbox-endpoints:
+  urls:
+    - http://banking-backend:8080
+  type: http
+tags:
+  - name: Accounts
+paths:
+  /v1/customers/{customerId}/accounts:
+    parameters:
+      - $ref: "#/components/parameters/CustomerId"
+    get:
+      tags:
+        - Accounts
+      operationId: listCustomerAccounts
+      summary: List a customer's accounts
+      security:
+        - OAuth2:
+            - banking.accounts.read
+      responses:
+        "200":
+          description: Customer accounts
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AccountCollectionResponse"
+        default:
+          $ref: "#/components/responses/ProblemResponse"
+  /v1/accounts/{accountId}:
+    parameters:
+      - $ref: "#/components/parameters/AccountId"
+    get:
+      tags:
+        - Accounts
+      operationId: getAccount
+      summary: Get account balances and limits
+      security:
+        - OAuth2:
+            - banking.accounts.read
+      responses:
+        "200":
+          description: Account
+          headers:
+            ETag:
+              $ref: "#/components/headers/ETag"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AccountResponse"
+        default:
+          $ref: "#/components/responses/ProblemResponse"
+  /v1/accounts/{accountId}/transactions:
+    parameters:
+      - $ref: "#/components/parameters/AccountId"
+    get:
+      tags:
+        - Accounts
+      operationId: listAccountTransactions
+      summary: List booked ledger entries
+      security:
+        - OAuth2:
+            - banking.accounts.read
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: Ledger entries
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LedgerCollectionResponse"
+        default:
+          $ref: "#/components/responses/ProblemResponse"
+  /v1/accounts/{accountId}/limits:
+    parameters:
+      - $ref: "#/components/parameters/AccountId"
+    patch:
+      tags:
+        - Accounts
+      operationId: patchAccountLimits
+      summary: Change one or more account limits
+      security:
+        - OAuth2:
+            - banking.accounts.limits.write
+      parameters:
+        - $ref: "#/components/parameters/IfMatch"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AccountLimitsPatch"
+            example:
+              dailyTransferLimit:
+                currency: GTQ
+                amount: "85000.00"
+      responses:
+        "200":
+          description: Account with updated limits
+          headers:
+            ETag:
+              $ref: "#/components/headers/ETag"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AccountResponse"
+        default:
+          $ref: "#/components/responses/ProblemResponse"
+security:
+  - OAuth2: []
+components:
+  headers:
+    ETag:
+      description: Strong entity version used with If-Match.
+      schema:
+        type: string
+        example: '"2"'
+  parameters:
+    AccountId:
+      name: accountId
+      in: path
+      required: true
+      schema:
+        type: string
+        example: ACC-GTQ-001
+    CustomerId:
+      name: customerId
+      in: path
+      required: true
+      schema:
+        type: string
+        example: CUS-GT-001
+    IfMatch:
+      name: If-Match
+      in: header
+      required: true
+      description: Numeric version returned in the resource ETag, for example `"1"`.
+      schema:
+        type: string
+        example: '"1"'
+    Limit:
+      name: limit
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 200
+        default: 50
+  responses:
+    ProblemResponse:
+      description: Error represented as an RFC 9457-style problem detail
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+  schemas:
+    Account:
+      type: object
+      required:
+        - accountId
+        - customerId
+        - currency
+        - ledgerBalance
+        - availableBalance
+        - status
+        - limits
+        - version
+      properties:
+        accountId:
+          type: string
+        customerId:
+          type: string
+        productType:
+          type: string
+        currency:
+          type: string
+          enum:
+            - GTQ
+            - USD
+        standardizedAccountMasked:
+          type: string
+        ledgerBalance:
+          $ref: "#/components/schemas/Money"
+        availableBalance:
+          $ref: "#/components/schemas/Money"
+        status:
+          type: string
+          enum:
+            - ACTIVE
+            - BLOCKED
+            - CLOSED
+        limits:
+          type: object
+          required:
+            - dailyTransferLimit
+            - dailyCashWithdrawalLimit
+          properties:
+            dailyTransferLimit:
+              $ref: "#/components/schemas/Money"
+            dailyCashWithdrawalLimit:
+              $ref: "#/components/schemas/Money"
+        version:
+          type: integer
+          minimum: 1
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    AccountCollectionResponse:
+      allOf:
+        - $ref: "#/components/schemas/EnvelopeBase"
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: "#/components/schemas/Account"
+    AccountLimitsPatch:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        dailyTransferLimit:
+          $ref: "#/components/schemas/Money"
+        dailyCashWithdrawalLimit:
+          $ref: "#/components/schemas/Money"
+    AccountResponse:
+      allOf:
+        - $ref: "#/components/schemas/EnvelopeBase"
+        - type: object
+          properties:
+            data:
+              $ref: "#/components/schemas/Account"
+    EnvelopeBase:
+      type: object
+      required:
+        - data
+        - meta
+      properties:
+        data: {}
+        meta:
+          $ref: "#/components/schemas/Metadata"
+    LedgerCollectionResponse:
+      allOf:
+        - $ref: "#/components/schemas/EnvelopeBase"
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: "#/components/schemas/LedgerEntry"
+    LedgerEntry:
+      type: object
+      required:
+        - entryId
+        - accountId
+        - type
+        - amount
+        - description
+        - referenceId
+        - bookedAt
+      properties:
+        entryId:
+          type: string
+        accountId:
+          type: string
+        type:
+          type: string
+          enum:
+            - DEBIT
+            - CREDIT
+        amount:
+          $ref: "#/components/schemas/Money"
+        description:
+          type: string
+        referenceId:
+          type: string
+        bookedAt:
+          type: string
+          format: date-time
+    Metadata:
+      type: object
+      required:
+        - correlationId
+      properties:
+        correlationId:
+          type: string
+          format: uuid
+        fapiInteractionId:
+          type: string
+        count:
+          type: integer
+        replayed:
+          type: boolean
+    Money:
+      type: object
+      required:
+        - currency
+        - amount
+      properties:
+        currency:
+          type: string
+          enum:
+            - GTQ
+            - USD
+        amount:
+          type: string
+          pattern: ^\d{1,12}(\.\d{1,2})?$
+          example: "1250.00"
+      description: Decimal amount encoded as a string. The service stores it internally as integer minor units.
+    Problem:
+      type: object
+      required:
+        - type
+        - title
+        - status
+        - detail
+        - code
+        - correlationId
+      properties:
+        type:
+          type: string
+          format: uri
+        title:
+          type: string
+        status:
+          type: integer
+        detail:
+          type: string
+        instance:
+          type: string
+        code:
+          type: string
+        correlationId:
+          type: string
+        errors:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+  securitySchemes:
+    OAuth2:
+      type: oauth2
+      description: OAuth2 token validation and scope enforcement are performed by WSO2 API Manager.
+      flows:
+        clientCredentials:
+          tokenUrl: https://localhost:9443/oauth2/token
+          scopes:
+            banking.accounts.read: Read accounts and ledger entries
+            banking.accounts.limits.write: Change account limits
+x-demo-apim-context: /account-management

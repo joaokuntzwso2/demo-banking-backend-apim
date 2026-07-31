@@ -1,0 +1,469 @@
+openapi: 3.0.3
+info:
+  title: Transfer Processing API
+  version: 1.0.0
+  description: >-
+    Internal, CCA, LBTR, and SIPA transfer initiation and lifecycle processing.
+
+
+    This is a standalone context contract for WSO2 API Manager 4.7. All data and policy values are fictional and
+    intended only for demonstrations.
+  contact:
+    name: Demo Banking Engineering Team
+  license:
+    name: Apache-2.0
+servers:
+  - url: http://banking-backend:8080
+    description: Docker Compose backend service
+x-wso2-basePath: /transfer-processing/1.0.0
+x-wso2-production-endpoints:
+  urls:
+    - http://banking-backend:8080
+  type: http
+x-wso2-sandbox-endpoints:
+  urls:
+    - http://banking-backend:8080
+  type: http
+tags:
+  - name: Transfers
+paths:
+  /v1/transfers:
+    post:
+      tags:
+        - Transfers
+      operationId: createTransfer
+      summary: Initiate an internal, CCA, LBTR, or SIPA transfer
+      description: |
+        Reserves available funds immediately. Depending on rail, amount, beneficiary age/verification,
+        and customer risk, the transfer may require maker-checker approval, compliance review, or both.
+        Idempotency-Key makes retried requests safe.
+      security:
+        - OAuth2:
+            - banking.transfers.write
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TransferCreate"
+            examples:
+              domesticClearing:
+                summary: Domestic CCA supplier payment
+                value:
+                  debtorAccountId: ACC-GTQ-001
+                  beneficiaryId: BEN-GT-001
+                  rail: CCA
+                  amount:
+                    currency: GTQ
+                    amount: "1250.00"
+                  purposeCode: EDUCATION
+                  reference: Colegiatura agosto
+              internal:
+                summary: Immediate internal transfer
+                value:
+                  debtorAccountId: ACC-GTQ-001
+                  beneficiaryId: BEN-GT-002
+                  rail: INTERNAL
+                  amount:
+                    currency: GTQ
+                    amount: "150.00"
+                  purposeCode: FAMILY_SUPPORT
+                  reference: Apoyo familiar
+      responses:
+        "200":
+          description: Idempotent replay of an existing result
+          headers:
+            Idempotency-Replayed:
+              schema:
+                type: string
+                example: "true"
+            ETag:
+              $ref: "#/components/headers/ETag"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TransferResponse"
+        "201":
+          description: Transfer created
+          headers:
+            ETag:
+              $ref: "#/components/headers/ETag"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TransferResponse"
+        default:
+          $ref: "#/components/responses/ProblemResponse"
+    get:
+      tags:
+        - Transfers
+      operationId: listTransfers
+      summary: Search transfers
+      security:
+        - OAuth2:
+            - banking.transfers.read
+      parameters:
+        - name: accountId
+          in: query
+          schema:
+            type: string
+        - name: status
+          in: query
+          schema:
+            $ref: "#/components/schemas/TransferStatus"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: Matching transfers
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TransferCollectionResponse"
+        default:
+          $ref: "#/components/responses/ProblemResponse"
+  /v1/transfers/{transferId}:
+    parameters:
+      - $ref: "#/components/parameters/TransferId"
+    get:
+      tags:
+        - Transfers
+      operationId: getTransfer
+      summary: Get transfer workflow state
+      security:
+        - OAuth2:
+            - banking.transfers.read
+      responses:
+        "200":
+          description: Transfer
+          headers:
+            ETag:
+              $ref: "#/components/headers/ETag"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TransferResponse"
+        default:
+          $ref: "#/components/responses/ProblemResponse"
+    patch:
+      tags:
+        - Transfers
+      operationId: actOnTransfer
+      summary: Apply a workflow action to a transfer
+      description: Allowed actions depend on current state. Typical actions are APPROVE, REJECT, CANCEL, SETTLE, and RETURN.
+      security:
+        - OAuth2:
+            - banking.transfers.approve
+      parameters:
+        - $ref: "#/components/parameters/IfMatch"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TransferAction"
+            example:
+              action: APPROVE
+              actor: supervisor.maria
+      responses:
+        "200":
+          description: Transfer after action
+          headers:
+            ETag:
+              $ref: "#/components/headers/ETag"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TransferResponse"
+        default:
+          $ref: "#/components/responses/ProblemResponse"
+security:
+  - OAuth2: []
+components:
+  headers:
+    ETag:
+      description: Strong entity version used with If-Match.
+      schema:
+        type: string
+        example: '"2"'
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: Unique key for safely retrying a POST. Reusing it with a different body returns 409.
+      schema:
+        type: string
+        minLength: 8
+        maxLength: 128
+        example: 0bbca8d9-cca-transfer-001
+    IfMatch:
+      name: If-Match
+      in: header
+      required: true
+      description: Numeric version returned in the resource ETag, for example `"1"`.
+      schema:
+        type: string
+        example: '"1"'
+    Limit:
+      name: limit
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 200
+        default: 50
+    TransferId:
+      name: transferId
+      in: path
+      required: true
+      schema:
+        type: string
+        example: TRF-GT-example
+  responses:
+    ProblemResponse:
+      description: Error represented as an RFC 9457-style problem detail
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+  schemas:
+    EnvelopeBase:
+      type: object
+      required:
+        - data
+        - meta
+      properties:
+        data: {}
+        meta:
+          $ref: "#/components/schemas/Metadata"
+    Metadata:
+      type: object
+      required:
+        - correlationId
+      properties:
+        correlationId:
+          type: string
+          format: uuid
+        fapiInteractionId:
+          type: string
+        count:
+          type: integer
+        replayed:
+          type: boolean
+    Money:
+      type: object
+      required:
+        - currency
+        - amount
+      properties:
+        currency:
+          type: string
+          enum:
+            - GTQ
+            - USD
+        amount:
+          type: string
+          pattern: ^\d{1,12}(\.\d{1,2})?$
+          example: "1250.00"
+      description: Decimal amount encoded as a string. The service stores it internally as integer minor units.
+    Problem:
+      type: object
+      required:
+        - type
+        - title
+        - status
+        - detail
+        - code
+        - correlationId
+      properties:
+        type:
+          type: string
+          format: uri
+        title:
+          type: string
+        status:
+          type: integer
+        detail:
+          type: string
+        instance:
+          type: string
+        code:
+          type: string
+        correlationId:
+          type: string
+        errors:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+    Transfer:
+      type: object
+      required:
+        - transferId
+        - debtorAccountId
+        - customerId
+        - beneficiaryId
+        - rail
+        - amount
+        - purposeCode
+        - status
+        - approvalRequired
+        - version
+      properties:
+        transferId:
+          type: string
+        debtorAccountId:
+          type: string
+        customerId:
+          type: string
+        beneficiaryId:
+          type: string
+        rail:
+          type: string
+          enum:
+            - INTERNAL
+            - CCA
+            - LBTR
+            - SIPA
+        amount:
+          $ref: "#/components/schemas/Money"
+        purposeCode:
+          type: string
+        reference:
+          type: string
+          nullable: true
+        requestedExecutionDate:
+          type: string
+          format: date
+        status:
+          $ref: "#/components/schemas/TransferStatus"
+        approvalRequired:
+          type: boolean
+        approvedBy:
+          type: string
+          nullable: true
+        complianceCaseId:
+          type: string
+          nullable: true
+        holdId:
+          type: string
+          nullable: true
+        rejectionReason:
+          type: string
+          nullable: true
+        settledAt:
+          type: string
+          format: date-time
+          nullable: true
+        returnedAt:
+          type: string
+          format: date-time
+          nullable: true
+        version:
+          type: integer
+          minimum: 1
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    TransferAction:
+      type: object
+      additionalProperties: false
+      required:
+        - action
+      properties:
+        action:
+          type: string
+          enum:
+            - APPROVE
+            - REJECT
+            - CANCEL
+            - SETTLE
+            - RETURN
+        actor:
+          type: string
+          maxLength: 120
+        reason:
+          type: string
+          maxLength: 240
+    TransferCollectionResponse:
+      allOf:
+        - $ref: "#/components/schemas/EnvelopeBase"
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: "#/components/schemas/Transfer"
+    TransferCreate:
+      type: object
+      additionalProperties: false
+      required:
+        - debtorAccountId
+        - beneficiaryId
+        - rail
+        - amount
+        - purposeCode
+      properties:
+        debtorAccountId:
+          type: string
+        beneficiaryId:
+          type: string
+        rail:
+          type: string
+          enum:
+            - INTERNAL
+            - CCA
+            - LBTR
+            - SIPA
+        amount:
+          $ref: "#/components/schemas/Money"
+        purposeCode:
+          type: string
+          enum:
+            - PERSON_TO_PERSON
+            - SUPPLIER_PAYMENT
+            - PAYROLL
+            - EDUCATION
+            - HEALTHCARE
+            - FAMILY_SUPPORT
+            - OTHER
+        reference:
+          type: string
+          maxLength: 140
+        requestedExecutionDate:
+          type: string
+          format: date
+    TransferResponse:
+      allOf:
+        - $ref: "#/components/schemas/EnvelopeBase"
+        - type: object
+          properties:
+            data:
+              $ref: "#/components/schemas/Transfer"
+    TransferStatus:
+      type: string
+      enum:
+        - PENDING_COMPLIANCE
+        - PENDING_APPROVAL
+        - PROCESSING
+        - SETTLED
+        - REJECTED
+        - CANCELLED
+        - RETURNED
+  securitySchemes:
+    OAuth2:
+      type: oauth2
+      description: OAuth2 token validation and scope enforcement are performed by WSO2 API Manager.
+      flows:
+        clientCredentials:
+          tokenUrl: https://localhost:9443/oauth2/token
+          scopes:
+            banking.transfers.read: Read transfers
+            banking.transfers.write: Initiate transfers
+            banking.transfers.approve: Approve and operate transfer workflows
+x-demo-apim-context: /transfer-processing

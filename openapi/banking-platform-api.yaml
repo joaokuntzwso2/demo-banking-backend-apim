@@ -1,0 +1,2013 @@
+openapi: 3.0.3
+info:
+  title: Digital Banking Platform API
+  version: 1.0.0
+  description: 'A fictional, in-memory digital banking platform designed for demonstration through WSO2 API Manager
+    4.7.
+
+
+    The sample domain includes GTQ and USD accounts,
+
+    standardized account identifiers, domestic clearing (CCA), real-time gross settlement (LBTR),
+
+    regional payments (SIPA), family remittances, maker-checker approval, and compliance review.
+
+
+    All people, institutions, account identifiers, thresholds, exchange rates, and policy rules are
+
+    synthetic demo data. The backend does not authenticate OAuth tokens itself; WSO2 API Manager is
+
+    expected to enforce authentication, subscriptions, scopes, throttling, and mediation policies.
+
+    '
+  contact:
+    name: Demo Banking Engineering Team
+  license:
+    name: Apache-2.0
+servers:
+- url: http://banking-backend:8080
+  description: Docker Compose backend service
+tags:
+- name: Health
+- name: Administration
+- name: Customers
+- name: Accounts
+- name: Beneficiaries
+- name: Cards
+- name: Transfers
+- name: Remittances
+- name: Compliance
+security:
+- OAuth2: []
+paths:
+  /health:
+    get:
+      tags:
+      - Health
+      operationId: getHealth
+      summary: Check service health
+      security: []
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+  /admin/snapshot:
+    get:
+      tags:
+      - Administration
+      operationId: getDemoSnapshot
+      summary: Return counts for the current in-memory state
+      security:
+      - OAuth2:
+        - banking.admin
+      responses:
+        '200':
+          $ref: '#/components/responses/SnapshotResponse'
+        default:
+          $ref: '#/components/responses/ProblemResponse'
+  /admin/reset:
+    post:
+      tags:
+      - Administration
+      operationId: resetDemoState
+      summary: Reset the service to its original seed data
+      description: Intended only for deterministic demo setup and automated tests.
+      security:
+      - OAuth2:
+        - banking.admin
+      responses:
+        '200':
+          description: State reset
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/EnvelopeBase'
+                - type: object
+                  properties:
+                    data:
+                      type: object
+                      required:
+                      - reset
+                      - snapshot
+                      properties:
+                        reset:
+                          type: boolean
+                        snapshot:
+                          $ref: '#/components/schemas/Snapshot'
+        default:
+          $ref: '#/components/responses/ProblemResponse'
+  /v1/customers/{customerId}:
+    parameters:
+    - $ref: '#/components/parameters/CustomerId'
+    get:
+      tags:
+      - Customers
+      operationId: getCustomer
+      summary: Get a customer profile
+      security:
+      - OAuth2:
+        - customers.read
+      responses:
+        '200':
+          description: Customer profile
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomerResponse'
+        default:
+          $ref: '#/components/responses/ProblemResponse'
+    patch:
+      tags:
+      - Customers
+      operationId: patchCustomer
+      summary: Partially update mutable customer profile fields
+      security:
+      - OAuth2:
+        - customers.write
+      parameters:
+      - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CustomerPatch'
+            example:
+              preferredLanguage: es-GT
+              contact:
+                mobile: +502 5550 0199
+      responses:
+        '200':
+          description: Updated customer
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomerResponse'
+        default:
+          $ref: '#/components/responses/ProblemResponse'
+  /v1/customers/{customerId}/accounts:
+    parameters:
+    - $ref: '#/components/parameters/CustomerId'
+    get:
+      tags:
+      - Accounts
+      operationId: listCustomerAccounts
+      summary: List a customer's accounts
+      security:
+      - OAuth2:
+        - accounts.read
+      responses:
+        '200':
+          description: Customer accounts
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountCollectionResponse'
+        default:
+          $ref: '#/components/responses/ProblemResponse'
+  /v1/customers/{customerId}/cards:
+    parameters:
+    - $ref: '#/components/parameters/CustomerId'
+    get:
+      tags:
+      - Cards
+      operationId: listCustomerCards
+      summary: List a customer's cards
+      security:
+      - OAuth2:
+        - cards.read
+      responses:
+        '200':
+          description: Customer cards
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CardCollectionResponse'
+        default:
+          $ref: '#/components/responses/ProblemResponse'
+  /v1/customers/{customerId}/beneficiaries:
+    parameters:
+    - $ref: '#/components/parameters/CustomerId'
+    get:
+      tags:
+      - Beneficiaries
+      operationId: listBeneficiaries
+      summary: List transfer beneficiaries
+      security:
+      - OAuth2:
+        - beneficiaries.read
+      responses:
+        '200':
+          description: Beneficiaries
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BeneficiaryCollectionResponse'
+        default:
+          $ref: '#/components/responses/ProblemResponse'
+    post:
+      tags:
+      - Beneficiaries
+      operationId: createBeneficiary
+      summary: Create a beneficiary
+      description: New or replaced beneficiaries enter pending verification and trigger demo cooling-period controls.
+      security:
+      - OAuth2:
+        - beneficiaries.write
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BeneficiaryInput'
+            example:
+              type: DOMESTIC_EXTERNAL
+              name: Proveedor Comercial Regional
+              bankCode: DEMO-03
+              bankName: Banco Comercial Demo
+              country: GT
+              currency: GTQ
+              accountNumberMasked: '**** **** **** 9012'
+              alias: Proveedor mensual
+      responses:
+        '201':
+          description: Beneficiary created
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BeneficiaryResponse'
+        default:
+          $ref: '#/components/responses/ProblemResponse'
+  /v1/customers/{customerId}/beneficiaries/{beneficiaryId}:
+    parameters:
+    - $ref: '#/components/parameters/CustomerId'
+    - $ref: '#/components/parameters/BeneficiaryId'
+    put:
+      tags:
+      - Beneficiaries
+      operationId: replaceBeneficiary
+      summary: Fully replace a beneficiary
+      security:
+      - OAuth2:
+        - beneficiaries.write
+      parameters:
+      - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BeneficiaryInput'
+      responses:
+        '200':
+          description: Beneficiary replaced
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BeneficiaryResponse'
+        default:
+          $ref: '#/components/responses/ProblemResponse'
+  /v1/accounts/{accountId}:
+    parameters:
+    - $ref: '#/components/parameters/AccountId'
+    get:
+      tags:
+      - Accounts
+      operationId: getAccount
+      summary: Get account balances and limits
+      security:
+      - OAuth2:
+        - accounts.read
+      responses:
+        '200':
+          description: Account
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountResponse'
+        default:
+          $ref: '#/components/responses/ProblemResponse'
+  /v1/accounts/{accountId}/transactions:
+    parameters:
+    - $ref: '#/components/parameters/AccountId'
+    get:
+      tags:
+      - Accounts
+      operationId: listAccountTransactions
+      summary: List booked ledger entries
+      security:
+      - OAuth2:
+        - accounts.read
+      parameters:
+      - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Ledger entries
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LedgerCollectionResponse'
+        default:
+          $ref: '#/components/responses/ProblemResponse'
+  /v1/accounts/{accountId}/limits:
+    parameters:
+    - $ref: '#/components/parameters/AccountId'
+    patch:
+      tags:
+      - Accounts
+      operationId: patchAccountLimits
+      summary: Change one or more account limits
+      security:
+      - OAuth2:
+        - accounts.limits.write
+      parameters:
+      - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AccountLimitsPatch'
+            example:
+              dailyTransferLimit:
+                currency: GTQ
+                amount: '85000.00'
+      responses:
+        '200':
+          description: Account with updated limits
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountResponse'
+        default:
+          $ref: '#/components/responses/ProblemResponse'
+  /v1/cards/{cardId}:
+    parameters:
+    - $ref: '#/components/parameters/CardId'
+    get:
+      tags:
+      - Cards
+      operationId: getCard
+      summary: Get card status and controls
+      security:
+      - OAuth2:
+        - cards.read
+      responses:
+        '200':
+          description: Card
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CardResponse'
+        default:
+          $ref: '#/components/responses/ProblemResponse'
+    patch:
+      tags:
+      - Cards
+      operationId: patchCard
+      summary: Change card status or channel controls
+      security:
+      - OAuth2:
+        - cards.write
+      parameters:
+      - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CardPatch'
+            example:
+              status: TEMPORARILY_BLOCKED
+              controls:
+                ecommerceEnabled: false
+      responses:
+        '200':
+          description: Updated card
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CardResponse'
+        default:
+          $ref: '#/components/responses/ProblemResponse'
+  /v1/transfers:
+    post:
+      tags:
+      - Transfers
+      operationId: createTransfer
+      summary: Initiate an internal, CCA, LBTR, or SIPA transfer
+      description: 'Reserves available funds immediately. Depending on rail, amount, beneficiary age/verification,
+
+        and customer risk, the transfer may require maker-checker approval, compliance review, or both.
+
+        Idempotency-Key makes retried requests safe.
+
+        '
+      security:
+      - OAuth2:
+        - transfers.write
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TransferCreate'
+            examples:
+              domesticClearing:
+                summary: Domestic CCA supplier payment
+                value:
+                  debtorAccountId: ACC-GTQ-001
+                  beneficiaryId: BEN-GT-001
+                  rail: CCA
+                  amount:
+                    currency: GTQ
+                    amount: '1250.00'
+                  purposeCode: EDUCATION
+                  reference: Colegiatura agosto
+              internal:
+                summary: Immediate internal transfer
+                value:
+                  debtorAccountId: ACC-GTQ-001
+                  beneficiaryId: BEN-GT-002
+                  rail: INTERNAL
+                  amount:
+                    currency: GTQ
+                    amount: '150.00'
+                  purposeCode: FAMILY_SUPPORT
+                  reference: Apoyo familiar
+      responses:
+        '201':
+          description: Transfer created
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransferResponse'
+        '200':
+          description: Idempotent replay of an existing result
+          headers:
+            Idempotency-Replayed:
+              schema:
+                type: string
+                example: 'true'
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransferResponse'
+        default:
+          $ref: '#/components/responses/ProblemResponse'
+    get:
+      tags:
+      - Transfers
+      operationId: listTransfers
+      summary: Search transfers
+      security:
+      - OAuth2:
+        - transfers.read
+      parameters:
+      - name: accountId
+        in: query
+        schema:
+          type: string
+      - name: status
+        in: query
+        schema:
+          $ref: '#/components/schemas/TransferStatus'
+      - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Matching transfers
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransferCollectionResponse'
+        default:
+          $ref: '#/components/responses/ProblemResponse'
+  /v1/transfers/{transferId}:
+    parameters:
+    - $ref: '#/components/parameters/TransferId'
+    get:
+      tags:
+      - Transfers
+      operationId: getTransfer
+      summary: Get transfer workflow state
+      security:
+      - OAuth2:
+        - transfers.read
+      responses:
+        '200':
+          description: Transfer
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransferResponse'
+        default:
+          $ref: '#/components/responses/ProblemResponse'
+    patch:
+      tags:
+      - Transfers
+      operationId: actOnTransfer
+      summary: Apply a workflow action to a transfer
+      description: Allowed actions depend on current state. Typical actions are APPROVE, REJECT, CANCEL, SETTLE,
+        and RETURN.
+      security:
+      - OAuth2:
+        - transfers.approve
+      parameters:
+      - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TransferAction'
+            example:
+              action: APPROVE
+              actor: supervisor.maria
+      responses:
+        '200':
+          description: Transfer after action
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransferResponse'
+        default:
+          $ref: '#/components/responses/ProblemResponse'
+  /v1/remittances/quotes:
+    post:
+      tags:
+      - Remittances
+      operationId: createRemittanceQuote
+      summary: Quote an incoming USD-to-GTQ account-credit remittance
+      security:
+      - OAuth2:
+        - remittances.write
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RemittanceQuoteCreate'
+            example:
+              senderCountry: US
+              sourceAmount:
+                currency: USD
+                amount: '350.00'
+              payoutMethod: ACCOUNT_CREDIT
+              destinationAccountId: ACC-GTQ-001
+      responses:
+        '201':
+          description: Time-limited quote
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RemittanceQuoteResponse'
+        default:
+          $ref: '#/components/responses/ProblemResponse'
+  /v1/remittances:
+    post:
+      tags:
+      - Remittances
+      operationId: createRemittance
+      summary: Register an incoming family remittance
+      security:
+      - OAuth2:
+        - remittances.write
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RemittanceCreate'
+            example:
+              quoteId: RQT-GT-example
+              externalReference: MTO-2026-000091
+              sender:
+                name: Luis Herrera
+                country: US
+                relationship: Hermano
+              beneficiaryCustomerId: CUS-GT-001
+      responses:
+        '201':
+          description: Remittance created
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RemittanceResponse'
+        '200':
+          description: Idempotent replay
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RemittanceResponse'
+        default:
+          $ref: '#/components/responses/ProblemResponse'
+    get:
+      tags:
+      - Remittances
+      operationId: listRemittances
+      summary: Search remittances
+      security:
+      - OAuth2:
+        - remittances.read
+      parameters:
+      - name: customerId
+        in: query
+        schema:
+          type: string
+      - name: status
+        in: query
+        schema:
+          $ref: '#/components/schemas/RemittanceStatus'
+      - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Matching remittances
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RemittanceCollectionResponse'
+        default:
+          $ref: '#/components/responses/ProblemResponse'
+  /v1/remittances/{remittanceId}:
+    parameters:
+    - $ref: '#/components/parameters/RemittanceId'
+    get:
+      tags:
+      - Remittances
+      operationId: getRemittance
+      summary: Get a remittance
+      security:
+      - OAuth2:
+        - remittances.read
+      responses:
+        '200':
+          description: Remittance
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RemittanceResponse'
+        default:
+          $ref: '#/components/responses/ProblemResponse'
+    patch:
+      tags:
+      - Remittances
+      operationId: actOnRemittance
+      summary: Pay out, cancel, or reject a remittance
+      security:
+      - OAuth2:
+        - remittances.payout
+      parameters:
+      - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RemittanceAction'
+            example:
+              action: PAYOUT
+      responses:
+        '200':
+          description: Updated remittance
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RemittanceResponse'
+        default:
+          $ref: '#/components/responses/ProblemResponse'
+  /v1/compliance/cases:
+    post:
+      tags:
+      - Compliance
+      operationId: createComplianceCase
+      summary: Open a manual compliance case
+      security:
+      - OAuth2:
+        - compliance.write
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ComplianceCaseCreate'
+      responses:
+        '201':
+          description: Case created
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ComplianceCaseResponse'
+        default:
+          $ref: '#/components/responses/ProblemResponse'
+    get:
+      tags:
+      - Compliance
+      operationId: listComplianceCases
+      summary: Search compliance cases
+      security:
+      - OAuth2:
+        - compliance.read
+      parameters:
+      - name: status
+        in: query
+        schema:
+          type: string
+          enum:
+          - OPEN
+          - IN_REVIEW
+          - RESOLVED
+      - name: customerId
+        in: query
+        schema:
+          type: string
+      - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Matching cases
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ComplianceCaseCollectionResponse'
+        default:
+          $ref: '#/components/responses/ProblemResponse'
+  /v1/compliance/cases/{caseId}:
+    parameters:
+    - $ref: '#/components/parameters/CaseId'
+    get:
+      tags:
+      - Compliance
+      operationId: getComplianceCase
+      summary: Get a compliance case
+      security:
+      - OAuth2:
+        - compliance.read
+      responses:
+        '200':
+          description: Compliance case
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ComplianceCaseResponse'
+        default:
+          $ref: '#/components/responses/ProblemResponse'
+    patch:
+      tags:
+      - Compliance
+      operationId: actOnComplianceCase
+      summary: Assign, annotate, or resolve a case
+      description: Resolving a linked case atomically advances or rejects the linked transfer/remittance.
+      security:
+      - OAuth2:
+        - compliance.write
+      parameters:
+      - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ComplianceCaseAction'
+            examples:
+              assign:
+                value:
+                  action: ASSIGN
+                  assignedTo: aml.analyst
+              resolve:
+                value:
+                  action: RESOLVE
+                  disposition: CLEARED
+                  note: Source of funds confirmed
+      responses:
+        '200':
+          description: Updated case
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ComplianceCaseResponse'
+        default:
+          $ref: '#/components/responses/ProblemResponse'
+components:
+  securitySchemes:
+    OAuth2:
+      type: oauth2
+      description: OAuth2 token validation and scope enforcement are performed by WSO2 API Manager.
+      flows:
+        clientCredentials:
+          tokenUrl: https://localhost:9443/oauth2/token
+          scopes:
+            customers.read: Read customer profiles
+            customers.write: Update customer profiles
+            accounts.read: Read accounts and ledger entries
+            accounts.limits.write: Change account limits
+            beneficiaries.read: Read beneficiaries
+            beneficiaries.write: Create or replace beneficiaries
+            cards.read: Read cards
+            cards.write: Change card controls
+            transfers.read: Read transfers
+            transfers.write: Initiate transfers
+            transfers.approve: Approve and operate transfer workflows
+            remittances.read: Read remittances
+            remittances.write: Quote and create remittances
+            remittances.payout: Pay or reject remittances
+            compliance.read: Read compliance cases
+            compliance.write: Manage compliance cases
+            banking.admin: Reset and inspect demo state
+  parameters:
+    CustomerId:
+      name: customerId
+      in: path
+      required: true
+      schema:
+        type: string
+        example: CUS-GT-001
+    AccountId:
+      name: accountId
+      in: path
+      required: true
+      schema:
+        type: string
+        example: ACC-GTQ-001
+    BeneficiaryId:
+      name: beneficiaryId
+      in: path
+      required: true
+      schema:
+        type: string
+        example: BEN-GT-001
+    CardId:
+      name: cardId
+      in: path
+      required: true
+      schema:
+        type: string
+        example: CARD-GT-001
+    TransferId:
+      name: transferId
+      in: path
+      required: true
+      schema:
+        type: string
+        example: TRF-GT-example
+    RemittanceId:
+      name: remittanceId
+      in: path
+      required: true
+      schema:
+        type: string
+        example: RMT-GT-example
+    CaseId:
+      name: caseId
+      in: path
+      required: true
+      schema:
+        type: string
+        example: CMP-GT-example
+    IfMatch:
+      name: If-Match
+      in: header
+      required: true
+      description: Numeric version returned in the resource ETag, for example `"1"`.
+      schema:
+        type: string
+        example: '"1"'
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: Unique key for safely retrying a POST. Reusing it with a different body returns 409.
+      schema:
+        type: string
+        minLength: 8
+        maxLength: 128
+        example: 0bbca8d9-cca-transfer-001
+    Limit:
+      name: limit
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 200
+        default: 50
+  headers:
+    ETag:
+      description: Strong entity version used with If-Match.
+      schema:
+        type: string
+        example: '"2"'
+  responses:
+    ProblemResponse:
+      description: Error represented as an RFC 9457-style problem detail
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    SnapshotResponse:
+      description: Current in-memory entity counts
+      content:
+        application/json:
+          schema:
+            allOf:
+            - $ref: '#/components/schemas/EnvelopeBase'
+            - type: object
+              properties:
+                data:
+                  $ref: '#/components/schemas/Snapshot'
+  schemas:
+    Money:
+      type: object
+      required:
+      - currency
+      - amount
+      properties:
+        currency:
+          type: string
+          enum:
+          - GTQ
+          - USD
+        amount:
+          type: string
+          pattern: ^\d{1,12}(\.\d{1,2})?$
+          example: '1250.00'
+      description: Decimal amount encoded as a string. The service stores it internally as integer minor units.
+    Metadata:
+      type: object
+      required:
+      - correlationId
+      properties:
+        correlationId:
+          type: string
+          format: uuid
+        fapiInteractionId:
+          type: string
+        count:
+          type: integer
+        replayed:
+          type: boolean
+    EnvelopeBase:
+      type: object
+      required:
+      - data
+      - meta
+      properties:
+        data: {}
+        meta:
+          $ref: '#/components/schemas/Metadata'
+    Customer:
+      type: object
+      required:
+      - customerId
+      - customerType
+      - legalName
+      - displayName
+      - kycStatus
+      - riskRating
+      - version
+      properties:
+        customerId:
+          type: string
+        customerType:
+          type: string
+          enum:
+          - INDIVIDUAL
+          - LEGAL_ENTITY
+        legalName:
+          type: string
+        displayName:
+          type: string
+        document:
+          type: object
+          properties:
+            type:
+              type: string
+              enum:
+              - DPI
+              - REGISTRATION
+            maskedNumber:
+              type: string
+        taxIdMasked:
+          type: string
+        kycStatus:
+          type: string
+          enum:
+          - VERIFIED
+          - ENHANCED_DUE_DILIGENCE
+          - PENDING
+        riskRating:
+          type: string
+          enum:
+          - LOW
+          - MEDIUM
+          - HIGH
+        preferredLanguage:
+          type: string
+          enum:
+          - es-GT
+          - en-US
+        contact:
+          $ref: '#/components/schemas/Contact'
+        address:
+          $ref: '#/components/schemas/Address'
+        accountIds:
+          type: array
+          items:
+            type: string
+        beneficiaryIds:
+          type: array
+          items:
+            type: string
+        version:
+          type: integer
+          minimum: 1
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    Contact:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+        mobile:
+          type: string
+    Address:
+      type: object
+      additionalProperties:
+        type: string
+      properties:
+        department:
+          type: string
+        municipality:
+          type: string
+        zone:
+          type: string
+    CustomerPatch:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        displayName:
+          type: string
+          maxLength: 120
+        preferredLanguage:
+          type: string
+          enum:
+          - es-GT
+          - en-US
+        contact:
+          $ref: '#/components/schemas/Contact'
+        address:
+          $ref: '#/components/schemas/Address'
+    Account:
+      type: object
+      required:
+      - accountId
+      - customerId
+      - currency
+      - ledgerBalance
+      - availableBalance
+      - status
+      - limits
+      - version
+      properties:
+        accountId:
+          type: string
+        customerId:
+          type: string
+        productType:
+          type: string
+        currency:
+          type: string
+          enum:
+          - GTQ
+          - USD
+        standardizedAccountMasked:
+          type: string
+        ledgerBalance:
+          $ref: '#/components/schemas/Money'
+        availableBalance:
+          $ref: '#/components/schemas/Money'
+        status:
+          type: string
+          enum:
+          - ACTIVE
+          - BLOCKED
+          - CLOSED
+        limits:
+          type: object
+          required:
+          - dailyTransferLimit
+          - dailyCashWithdrawalLimit
+          properties:
+            dailyTransferLimit:
+              $ref: '#/components/schemas/Money'
+            dailyCashWithdrawalLimit:
+              $ref: '#/components/schemas/Money'
+        version:
+          type: integer
+          minimum: 1
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    AccountLimitsPatch:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        dailyTransferLimit:
+          $ref: '#/components/schemas/Money'
+        dailyCashWithdrawalLimit:
+          $ref: '#/components/schemas/Money'
+    BeneficiaryInput:
+      type: object
+      additionalProperties: false
+      required:
+      - type
+      - name
+      - bankCode
+      - bankName
+      - country
+      - currency
+      - accountNumberMasked
+      properties:
+        type:
+          type: string
+          enum:
+          - INTERNAL
+          - DOMESTIC_EXTERNAL
+          - REGIONAL_EXTERNAL
+        name:
+          type: string
+          maxLength: 160
+        bankCode:
+          type: string
+          maxLength: 30
+        bankName:
+          type: string
+          maxLength: 160
+        country:
+          type: string
+          pattern: ^[A-Z]{2}$
+        currency:
+          type: string
+          enum:
+          - GTQ
+          - USD
+        accountNumberMasked:
+          type: string
+          maxLength: 60
+        internalAccountId:
+          type: string
+        alias:
+          type: string
+          maxLength: 80
+    Beneficiary:
+      allOf:
+      - $ref: '#/components/schemas/BeneficiaryInput'
+      - type: object
+        required:
+        - beneficiaryId
+        - customerId
+        - verificationStatus
+        - version
+        - createdAt
+        - updatedAt
+        properties:
+          beneficiaryId:
+            type: string
+          customerId:
+            type: string
+          verificationStatus:
+            type: string
+            enum:
+            - PENDING_VERIFICATION
+            - VERIFIED
+          version:
+            type: integer
+            minimum: 1
+          createdAt:
+            type: string
+            format: date-time
+          updatedAt:
+            type: string
+            format: date-time
+    Card:
+      type: object
+      required:
+      - cardId
+      - customerId
+      - linkedAccountId
+      - productType
+      - network
+      - last4
+      - status
+      - controls
+      - version
+      properties:
+        cardId:
+          type: string
+        customerId:
+          type: string
+        linkedAccountId:
+          type: string
+        productType:
+          type: string
+          enum:
+          - DEBIT
+          - CREDIT
+        network:
+          type: string
+        last4:
+          type: string
+          minLength: 4
+          maxLength: 4
+        status:
+          type: string
+          enum:
+          - ACTIVE
+          - TEMPORARILY_BLOCKED
+        controls:
+          $ref: '#/components/schemas/CardControls'
+        version:
+          type: integer
+          minimum: 1
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    CardControls:
+      type: object
+      properties:
+        internationalEnabled:
+          type: boolean
+        ecommerceEnabled:
+          type: boolean
+        contactlessEnabled:
+          type: boolean
+    CardPatch:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        status:
+          type: string
+          enum:
+          - ACTIVE
+          - TEMPORARILY_BLOCKED
+        controls:
+          $ref: '#/components/schemas/CardControls'
+    TransferStatus:
+      type: string
+      enum:
+      - PENDING_COMPLIANCE
+      - PENDING_APPROVAL
+      - PROCESSING
+      - SETTLED
+      - REJECTED
+      - CANCELLED
+      - RETURNED
+    TransferCreate:
+      type: object
+      additionalProperties: false
+      required:
+      - debtorAccountId
+      - beneficiaryId
+      - rail
+      - amount
+      - purposeCode
+      properties:
+        debtorAccountId:
+          type: string
+        beneficiaryId:
+          type: string
+        rail:
+          type: string
+          enum:
+          - INTERNAL
+          - CCA
+          - LBTR
+          - SIPA
+        amount:
+          $ref: '#/components/schemas/Money'
+        purposeCode:
+          type: string
+          enum:
+          - PERSON_TO_PERSON
+          - SUPPLIER_PAYMENT
+          - PAYROLL
+          - EDUCATION
+          - HEALTHCARE
+          - FAMILY_SUPPORT
+          - OTHER
+        reference:
+          type: string
+          maxLength: 140
+        requestedExecutionDate:
+          type: string
+          format: date
+    Transfer:
+      type: object
+      required:
+      - transferId
+      - debtorAccountId
+      - customerId
+      - beneficiaryId
+      - rail
+      - amount
+      - purposeCode
+      - status
+      - approvalRequired
+      - version
+      properties:
+        transferId:
+          type: string
+        debtorAccountId:
+          type: string
+        customerId:
+          type: string
+        beneficiaryId:
+          type: string
+        rail:
+          type: string
+          enum:
+          - INTERNAL
+          - CCA
+          - LBTR
+          - SIPA
+        amount:
+          $ref: '#/components/schemas/Money'
+        purposeCode:
+          type: string
+        reference:
+          type: string
+          nullable: true
+        requestedExecutionDate:
+          type: string
+          format: date
+        status:
+          $ref: '#/components/schemas/TransferStatus'
+        approvalRequired:
+          type: boolean
+        approvedBy:
+          type: string
+          nullable: true
+        complianceCaseId:
+          type: string
+          nullable: true
+        holdId:
+          type: string
+          nullable: true
+        rejectionReason:
+          type: string
+          nullable: true
+        settledAt:
+          type: string
+          format: date-time
+          nullable: true
+        returnedAt:
+          type: string
+          format: date-time
+          nullable: true
+        version:
+          type: integer
+          minimum: 1
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    TransferAction:
+      type: object
+      additionalProperties: false
+      required:
+      - action
+      properties:
+        action:
+          type: string
+          enum:
+          - APPROVE
+          - REJECT
+          - CANCEL
+          - SETTLE
+          - RETURN
+        actor:
+          type: string
+          maxLength: 120
+        reason:
+          type: string
+          maxLength: 240
+    LedgerEntry:
+      type: object
+      required:
+      - entryId
+      - accountId
+      - type
+      - amount
+      - description
+      - referenceId
+      - bookedAt
+      properties:
+        entryId:
+          type: string
+        accountId:
+          type: string
+        type:
+          type: string
+          enum:
+          - DEBIT
+          - CREDIT
+        amount:
+          $ref: '#/components/schemas/Money'
+        description:
+          type: string
+        referenceId:
+          type: string
+        bookedAt:
+          type: string
+          format: date-time
+    RemittanceQuoteCreate:
+      type: object
+      additionalProperties: false
+      required:
+      - senderCountry
+      - sourceAmount
+      - payoutMethod
+      - destinationAccountId
+      properties:
+        senderCountry:
+          type: string
+          pattern: ^[A-Z]{2}$
+        sourceAmount:
+          $ref: '#/components/schemas/Money'
+        payoutMethod:
+          type: string
+          enum:
+          - ACCOUNT_CREDIT
+        destinationAccountId:
+          type: string
+    RemittanceQuote:
+      type: object
+      required:
+      - quoteId
+      - senderCountry
+      - sourceAmount
+      - fee
+      - exchangeRate
+      - payoutAmount
+      - payoutMethod
+      - destinationAccountId
+      - expiresAt
+      properties:
+        quoteId:
+          type: string
+        senderCountry:
+          type: string
+        sourceAmount:
+          $ref: '#/components/schemas/Money'
+        fee:
+          $ref: '#/components/schemas/Money'
+        exchangeRate:
+          type: string
+          example: '7.7500'
+        payoutAmount:
+          $ref: '#/components/schemas/Money'
+        payoutMethod:
+          type: string
+          enum:
+          - ACCOUNT_CREDIT
+        destinationAccountId:
+          type: string
+        expiresAt:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+    RemittanceCreate:
+      type: object
+      additionalProperties: false
+      required:
+      - quoteId
+      - externalReference
+      - sender
+      - beneficiaryCustomerId
+      properties:
+        quoteId:
+          type: string
+        externalReference:
+          type: string
+          maxLength: 100
+        sender:
+          type: object
+          additionalProperties: false
+          required:
+          - name
+          - country
+          properties:
+            name:
+              type: string
+              maxLength: 160
+            country:
+              type: string
+              pattern: ^[A-Z]{2}$
+            relationship:
+              type: string
+              maxLength: 80
+        beneficiaryCustomerId:
+          type: string
+    RemittanceStatus:
+      type: string
+      enum:
+      - PENDING_COMPLIANCE
+      - READY_FOR_PAYOUT
+      - PAID
+      - CANCELLED
+      - REJECTED
+    Remittance:
+      type: object
+      required:
+      - remittanceId
+      - quoteId
+      - externalReference
+      - sender
+      - beneficiaryCustomerId
+      - destinationAccountId
+      - sourceAmount
+      - payoutAmount
+      - status
+      - version
+      properties:
+        remittanceId:
+          type: string
+        quoteId:
+          type: string
+        externalReference:
+          type: string
+        sender:
+          type: object
+          additionalProperties: true
+        beneficiaryCustomerId:
+          type: string
+        destinationAccountId:
+          type: string
+        sourceAmount:
+          $ref: '#/components/schemas/Money'
+        payoutAmount:
+          $ref: '#/components/schemas/Money'
+        status:
+          $ref: '#/components/schemas/RemittanceStatus'
+        complianceCaseId:
+          type: string
+          nullable: true
+        version:
+          type: integer
+          minimum: 1
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        paidAt:
+          type: string
+          format: date-time
+          nullable: true
+    RemittanceAction:
+      type: object
+      additionalProperties: false
+      required:
+      - action
+      properties:
+        action:
+          type: string
+          enum:
+          - PAYOUT
+          - CANCEL
+          - REJECT
+        reason:
+          type: string
+          maxLength: 240
+    ComplianceCaseCreate:
+      type: object
+      additionalProperties: false
+      required:
+      - caseType
+      - subjectType
+      - subjectId
+      - customerId
+      - priority
+      - reasonCodes
+      properties:
+        caseType:
+          type: string
+          maxLength: 80
+        subjectType:
+          type: string
+          enum:
+          - CUSTOMER
+          - TRANSFER
+          - REMITTANCE
+        subjectId:
+          type: string
+          maxLength: 120
+        customerId:
+          type: string
+        priority:
+          type: string
+          enum:
+          - LOW
+          - MEDIUM
+          - HIGH
+          - CRITICAL
+        reasonCodes:
+          type: array
+          items:
+            type: string
+            maxLength: 80
+        amount:
+          $ref: '#/components/schemas/Money'
+    ComplianceCase:
+      type: object
+      required:
+      - caseId
+      - caseType
+      - subjectType
+      - subjectId
+      - customerId
+      - status
+      - priority
+      - reasonCodes
+      - notes
+      - version
+      properties:
+        caseId:
+          type: string
+        caseType:
+          type: string
+        subjectType:
+          type: string
+          enum:
+          - CUSTOMER
+          - TRANSFER
+          - REMITTANCE
+        subjectId:
+          type: string
+        customerId:
+          type: string
+        status:
+          type: string
+          enum:
+          - OPEN
+          - IN_REVIEW
+          - RESOLVED
+        priority:
+          type: string
+          enum:
+          - LOW
+          - MEDIUM
+          - HIGH
+          - CRITICAL
+        reasonCodes:
+          type: array
+          items:
+            type: string
+        amount:
+          $ref: '#/components/schemas/Money'
+        assignedTo:
+          type: string
+          nullable: true
+        notes:
+          type: array
+          items:
+            type: object
+            properties:
+              noteId:
+                type: string
+              text:
+                type: string
+              createdBy:
+                type: string
+              createdAt:
+                type: string
+                format: date-time
+        disposition:
+          type: string
+          enum:
+          - CLEARED
+          - REJECTED
+          nullable: true
+        version:
+          type: integer
+          minimum: 1
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        resolvedAt:
+          type: string
+          format: date-time
+          nullable: true
+    ComplianceCaseAction:
+      type: object
+      additionalProperties: false
+      required:
+      - action
+      properties:
+        action:
+          type: string
+          enum:
+          - ASSIGN
+          - ADD_NOTE
+          - RESOLVE
+        assignedTo:
+          type: string
+          maxLength: 120
+        note:
+          type: string
+          maxLength: 1000
+        disposition:
+          type: string
+          enum:
+          - CLEARED
+          - REJECTED
+    Snapshot:
+      type: object
+      additionalProperties:
+        type: integer
+      properties:
+        customers:
+          type: integer
+        accounts:
+          type: integer
+        beneficiaries:
+          type: integer
+        cards:
+          type: integer
+        transfers:
+          type: integer
+        activeHolds:
+          type: integer
+        ledgerEntries:
+          type: integer
+        remittances:
+          type: integer
+        complianceCases:
+          type: integer
+        auditEvents:
+          type: integer
+    Problem:
+      type: object
+      required:
+      - type
+      - title
+      - status
+      - detail
+      - code
+      - correlationId
+      properties:
+        type:
+          type: string
+          format: uri
+        title:
+          type: string
+        status:
+          type: integer
+        detail:
+          type: string
+        instance:
+          type: string
+        code:
+          type: string
+        correlationId:
+          type: string
+        errors:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+    HealthResponse:
+      type: object
+      required:
+      - status
+      - service
+      - version
+      - storage
+      - snapshot
+      - timestamp
+      properties:
+        status:
+          type: string
+          enum:
+          - UP
+        service:
+          type: string
+        version:
+          type: string
+        storage:
+          type: string
+          enum:
+          - in-memory
+        snapshot:
+          $ref: '#/components/schemas/Snapshot'
+        timestamp:
+          type: string
+          format: date-time
+    CustomerResponse:
+      allOf:
+      - $ref: '#/components/schemas/EnvelopeBase'
+      - type: object
+        properties:
+          data:
+            $ref: '#/components/schemas/Customer'
+    AccountResponse:
+      allOf:
+      - $ref: '#/components/schemas/EnvelopeBase'
+      - type: object
+        properties:
+          data:
+            $ref: '#/components/schemas/Account'
+    BeneficiaryResponse:
+      allOf:
+      - $ref: '#/components/schemas/EnvelopeBase'
+      - type: object
+        properties:
+          data:
+            $ref: '#/components/schemas/Beneficiary'
+    CardResponse:
+      allOf:
+      - $ref: '#/components/schemas/EnvelopeBase'
+      - type: object
+        properties:
+          data:
+            $ref: '#/components/schemas/Card'
+    TransferResponse:
+      allOf:
+      - $ref: '#/components/schemas/EnvelopeBase'
+      - type: object
+        properties:
+          data:
+            $ref: '#/components/schemas/Transfer'
+    RemittanceQuoteResponse:
+      allOf:
+      - $ref: '#/components/schemas/EnvelopeBase'
+      - type: object
+        properties:
+          data:
+            $ref: '#/components/schemas/RemittanceQuote'
+    RemittanceResponse:
+      allOf:
+      - $ref: '#/components/schemas/EnvelopeBase'
+      - type: object
+        properties:
+          data:
+            $ref: '#/components/schemas/Remittance'
+    ComplianceCaseResponse:
+      allOf:
+      - $ref: '#/components/schemas/EnvelopeBase'
+      - type: object
+        properties:
+          data:
+            $ref: '#/components/schemas/ComplianceCase'
+    AccountCollectionResponse:
+      allOf:
+      - $ref: '#/components/schemas/EnvelopeBase'
+      - type: object
+        properties:
+          data:
+            type: array
+            items:
+              $ref: '#/components/schemas/Account'
+    BeneficiaryCollectionResponse:
+      allOf:
+      - $ref: '#/components/schemas/EnvelopeBase'
+      - type: object
+        properties:
+          data:
+            type: array
+            items:
+              $ref: '#/components/schemas/Beneficiary'
+    CardCollectionResponse:
+      allOf:
+      - $ref: '#/components/schemas/EnvelopeBase'
+      - type: object
+        properties:
+          data:
+            type: array
+            items:
+              $ref: '#/components/schemas/Card'
+    TransferCollectionResponse:
+      allOf:
+      - $ref: '#/components/schemas/EnvelopeBase'
+      - type: object
+        properties:
+          data:
+            type: array
+            items:
+              $ref: '#/components/schemas/Transfer'
+    LedgerCollectionResponse:
+      allOf:
+      - $ref: '#/components/schemas/EnvelopeBase'
+      - type: object
+        properties:
+          data:
+            type: array
+            items:
+              $ref: '#/components/schemas/LedgerEntry'
+    RemittanceCollectionResponse:
+      allOf:
+      - $ref: '#/components/schemas/EnvelopeBase'
+      - type: object
+        properties:
+          data:
+            type: array
+            items:
+              $ref: '#/components/schemas/Remittance'
+    ComplianceCaseCollectionResponse:
+      allOf:
+      - $ref: '#/components/schemas/EnvelopeBase'
+      - type: object
+        properties:
+          data:
+            type: array
+            items:
+              $ref: '#/components/schemas/ComplianceCase'
+x-wso2-basePath: /banking-platform/1.0.0
+x-wso2-production-endpoints:
+  urls:
+  - http://banking-backend:8080
+  type: http
+x-wso2-sandbox-endpoints:
+  urls:
+  - http://banking-backend:8080
+  type: http

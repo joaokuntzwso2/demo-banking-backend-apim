@@ -1,0 +1,291 @@
+openapi: 3.0.3
+info:
+  title: Card Controls API
+  version: 1.0.0
+  description: >-
+    Customer card inventory, card status, and channel control maintenance.
+
+
+    This is a standalone context contract for WSO2 API Manager 4.7. All data and policy values are fictional and
+    intended only for demonstrations.
+  contact:
+    name: Demo Banking Engineering Team
+  license:
+    name: Apache-2.0
+servers:
+  - url: http://banking-backend:8080
+    description: Docker Compose backend service
+x-wso2-basePath: /card-controls/1.0.0
+x-wso2-production-endpoints:
+  urls:
+    - http://banking-backend:8080
+  type: http
+x-wso2-sandbox-endpoints:
+  urls:
+    - http://banking-backend:8080
+  type: http
+tags:
+  - name: Cards
+paths:
+  /v1/customers/{customerId}/cards:
+    parameters:
+      - $ref: "#/components/parameters/CustomerId"
+    get:
+      tags:
+        - Cards
+      operationId: listCustomerCards
+      summary: List a customer's cards
+      security:
+        - OAuth2:
+            - banking.cards.read
+      responses:
+        "200":
+          description: Customer cards
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CardCollectionResponse"
+        default:
+          $ref: "#/components/responses/ProblemResponse"
+  /v1/cards/{cardId}:
+    parameters:
+      - $ref: "#/components/parameters/CardId"
+    get:
+      tags:
+        - Cards
+      operationId: getCard
+      summary: Get card status and controls
+      security:
+        - OAuth2:
+            - banking.cards.read
+      responses:
+        "200":
+          description: Card
+          headers:
+            ETag:
+              $ref: "#/components/headers/ETag"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CardResponse"
+        default:
+          $ref: "#/components/responses/ProblemResponse"
+    patch:
+      tags:
+        - Cards
+      operationId: patchCard
+      summary: Change card status or channel controls
+      security:
+        - OAuth2:
+            - banking.cards.write
+      parameters:
+        - $ref: "#/components/parameters/IfMatch"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CardPatch"
+            example:
+              status: TEMPORARILY_BLOCKED
+              controls:
+                ecommerceEnabled: false
+      responses:
+        "200":
+          description: Updated card
+          headers:
+            ETag:
+              $ref: "#/components/headers/ETag"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CardResponse"
+        default:
+          $ref: "#/components/responses/ProblemResponse"
+security:
+  - OAuth2: []
+components:
+  headers:
+    ETag:
+      description: Strong entity version used with If-Match.
+      schema:
+        type: string
+        example: '"2"'
+  parameters:
+    CardId:
+      name: cardId
+      in: path
+      required: true
+      schema:
+        type: string
+        example: CARD-GT-001
+    CustomerId:
+      name: customerId
+      in: path
+      required: true
+      schema:
+        type: string
+        example: CUS-GT-001
+    IfMatch:
+      name: If-Match
+      in: header
+      required: true
+      description: Numeric version returned in the resource ETag, for example `"1"`.
+      schema:
+        type: string
+        example: '"1"'
+  responses:
+    ProblemResponse:
+      description: Error represented as an RFC 9457-style problem detail
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+  schemas:
+    Card:
+      type: object
+      required:
+        - cardId
+        - customerId
+        - linkedAccountId
+        - productType
+        - network
+        - last4
+        - status
+        - controls
+        - version
+      properties:
+        cardId:
+          type: string
+        customerId:
+          type: string
+        linkedAccountId:
+          type: string
+        productType:
+          type: string
+          enum:
+            - DEBIT
+            - CREDIT
+        network:
+          type: string
+        last4:
+          type: string
+          minLength: 4
+          maxLength: 4
+        status:
+          type: string
+          enum:
+            - ACTIVE
+            - TEMPORARILY_BLOCKED
+        controls:
+          $ref: "#/components/schemas/CardControls"
+        version:
+          type: integer
+          minimum: 1
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    CardCollectionResponse:
+      allOf:
+        - $ref: "#/components/schemas/EnvelopeBase"
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: "#/components/schemas/Card"
+    CardControls:
+      type: object
+      properties:
+        internationalEnabled:
+          type: boolean
+        ecommerceEnabled:
+          type: boolean
+        contactlessEnabled:
+          type: boolean
+    CardPatch:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        status:
+          type: string
+          enum:
+            - ACTIVE
+            - TEMPORARILY_BLOCKED
+        controls:
+          $ref: "#/components/schemas/CardControls"
+    CardResponse:
+      allOf:
+        - $ref: "#/components/schemas/EnvelopeBase"
+        - type: object
+          properties:
+            data:
+              $ref: "#/components/schemas/Card"
+    EnvelopeBase:
+      type: object
+      required:
+        - data
+        - meta
+      properties:
+        data: {}
+        meta:
+          $ref: "#/components/schemas/Metadata"
+    Metadata:
+      type: object
+      required:
+        - correlationId
+      properties:
+        correlationId:
+          type: string
+          format: uuid
+        fapiInteractionId:
+          type: string
+        count:
+          type: integer
+        replayed:
+          type: boolean
+    Problem:
+      type: object
+      required:
+        - type
+        - title
+        - status
+        - detail
+        - code
+        - correlationId
+      properties:
+        type:
+          type: string
+          format: uri
+        title:
+          type: string
+        status:
+          type: integer
+        detail:
+          type: string
+        instance:
+          type: string
+        code:
+          type: string
+        correlationId:
+          type: string
+        errors:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+  securitySchemes:
+    OAuth2:
+      type: oauth2
+      description: OAuth2 token validation and scope enforcement are performed by WSO2 API Manager.
+      flows:
+        clientCredentials:
+          tokenUrl: https://localhost:9443/oauth2/token
+          scopes:
+            banking.cards.read: Read cards
+            banking.cards.write: Change card controls
+x-demo-apim-context: /card-controls

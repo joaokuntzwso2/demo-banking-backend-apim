@@ -1,0 +1,310 @@
+openapi: 3.0.3
+info:
+  title: Beneficiary Management API
+  version: 1.0.0
+  description: >-
+    Internal, domestic, and regional beneficiary enrollment and replacement.
+
+
+    This is a standalone context contract for WSO2 API Manager 4.7. All data and policy values are fictional and
+    intended only for demonstrations.
+  contact:
+    name: Demo Banking Engineering Team
+  license:
+    name: Apache-2.0
+servers:
+  - url: http://banking-backend:8080
+    description: Docker Compose backend service
+x-wso2-basePath: /beneficiary-management/1.0.0
+x-wso2-production-endpoints:
+  urls:
+    - http://banking-backend:8080
+  type: http
+x-wso2-sandbox-endpoints:
+  urls:
+    - http://banking-backend:8080
+  type: http
+tags:
+  - name: Beneficiaries
+paths:
+  /v1/customers/{customerId}/beneficiaries:
+    parameters:
+      - $ref: "#/components/parameters/CustomerId"
+    get:
+      tags:
+        - Beneficiaries
+      operationId: listBeneficiaries
+      summary: List transfer beneficiaries
+      security:
+        - OAuth2:
+            - banking.beneficiaries.read
+      responses:
+        "200":
+          description: Beneficiaries
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BeneficiaryCollectionResponse"
+        default:
+          $ref: "#/components/responses/ProblemResponse"
+    post:
+      tags:
+        - Beneficiaries
+      operationId: createBeneficiary
+      summary: Create a beneficiary
+      description: New or replaced beneficiaries enter pending verification and trigger demo cooling-period controls.
+      security:
+        - OAuth2:
+            - banking.beneficiaries.write
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BeneficiaryInput"
+            example:
+              type: DOMESTIC_EXTERNAL
+              name: Proveedor Comercial Regional
+              bankCode: DEMO-03
+              bankName: Banco Comercial Demo
+              country: GT
+              currency: GTQ
+              accountNumberMasked: "**** **** **** 9012"
+              alias: Proveedor mensual
+      responses:
+        "201":
+          description: Beneficiary created
+          headers:
+            ETag:
+              $ref: "#/components/headers/ETag"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BeneficiaryResponse"
+        default:
+          $ref: "#/components/responses/ProblemResponse"
+  /v1/customers/{customerId}/beneficiaries/{beneficiaryId}:
+    parameters:
+      - $ref: "#/components/parameters/CustomerId"
+      - $ref: "#/components/parameters/BeneficiaryId"
+    put:
+      tags:
+        - Beneficiaries
+      operationId: replaceBeneficiary
+      summary: Fully replace a beneficiary
+      security:
+        - OAuth2:
+            - banking.beneficiaries.write
+      parameters:
+        - $ref: "#/components/parameters/IfMatch"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BeneficiaryInput"
+      responses:
+        "200":
+          description: Beneficiary replaced
+          headers:
+            ETag:
+              $ref: "#/components/headers/ETag"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BeneficiaryResponse"
+        default:
+          $ref: "#/components/responses/ProblemResponse"
+security:
+  - OAuth2: []
+components:
+  headers:
+    ETag:
+      description: Strong entity version used with If-Match.
+      schema:
+        type: string
+        example: '"2"'
+  parameters:
+    BeneficiaryId:
+      name: beneficiaryId
+      in: path
+      required: true
+      schema:
+        type: string
+        example: BEN-GT-001
+    CustomerId:
+      name: customerId
+      in: path
+      required: true
+      schema:
+        type: string
+        example: CUS-GT-001
+    IfMatch:
+      name: If-Match
+      in: header
+      required: true
+      description: Numeric version returned in the resource ETag, for example `"1"`.
+      schema:
+        type: string
+        example: '"1"'
+  responses:
+    ProblemResponse:
+      description: Error represented as an RFC 9457-style problem detail
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+  schemas:
+    Beneficiary:
+      allOf:
+        - $ref: "#/components/schemas/BeneficiaryInput"
+        - type: object
+          required:
+            - beneficiaryId
+            - customerId
+            - verificationStatus
+            - version
+            - createdAt
+            - updatedAt
+          properties:
+            beneficiaryId:
+              type: string
+            customerId:
+              type: string
+            verificationStatus:
+              type: string
+              enum:
+                - PENDING_VERIFICATION
+                - VERIFIED
+            version:
+              type: integer
+              minimum: 1
+            createdAt:
+              type: string
+              format: date-time
+            updatedAt:
+              type: string
+              format: date-time
+    BeneficiaryCollectionResponse:
+      allOf:
+        - $ref: "#/components/schemas/EnvelopeBase"
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: "#/components/schemas/Beneficiary"
+    BeneficiaryInput:
+      type: object
+      additionalProperties: false
+      required:
+        - type
+        - name
+        - bankCode
+        - bankName
+        - country
+        - currency
+        - accountNumberMasked
+      properties:
+        type:
+          type: string
+          enum:
+            - INTERNAL
+            - DOMESTIC_EXTERNAL
+            - REGIONAL_EXTERNAL
+        name:
+          type: string
+          maxLength: 160
+        bankCode:
+          type: string
+          maxLength: 30
+        bankName:
+          type: string
+          maxLength: 160
+        country:
+          type: string
+          pattern: ^[A-Z]{2}$
+        currency:
+          type: string
+          enum:
+            - GTQ
+            - USD
+        accountNumberMasked:
+          type: string
+          maxLength: 60
+        internalAccountId:
+          type: string
+        alias:
+          type: string
+          maxLength: 80
+    BeneficiaryResponse:
+      allOf:
+        - $ref: "#/components/schemas/EnvelopeBase"
+        - type: object
+          properties:
+            data:
+              $ref: "#/components/schemas/Beneficiary"
+    EnvelopeBase:
+      type: object
+      required:
+        - data
+        - meta
+      properties:
+        data: {}
+        meta:
+          $ref: "#/components/schemas/Metadata"
+    Metadata:
+      type: object
+      required:
+        - correlationId
+      properties:
+        correlationId:
+          type: string
+          format: uuid
+        fapiInteractionId:
+          type: string
+        count:
+          type: integer
+        replayed:
+          type: boolean
+    Problem:
+      type: object
+      required:
+        - type
+        - title
+        - status
+        - detail
+        - code
+        - correlationId
+      properties:
+        type:
+          type: string
+          format: uri
+        title:
+          type: string
+        status:
+          type: integer
+        detail:
+          type: string
+        instance:
+          type: string
+        code:
+          type: string
+        correlationId:
+          type: string
+        errors:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+  securitySchemes:
+    OAuth2:
+      type: oauth2
+      description: OAuth2 token validation and scope enforcement are performed by WSO2 API Manager.
+      flows:
+        clientCredentials:
+          tokenUrl: https://localhost:9443/oauth2/token
+          scopes:
+            banking.beneficiaries.read: Read beneficiaries
+            banking.beneficiaries.write: Create or replace beneficiaries
+x-demo-apim-context: /beneficiary-management

@@ -1,0 +1,500 @@
+openapi: 3.0.3
+info:
+  title: Family Remittance API
+  version: 1.0.0
+  description: >-
+    USD-to-GTQ remittance quotation, registration, review, and payout.
+
+
+    This is a standalone context contract for WSO2 API Manager 4.7. All data and policy values are fictional and
+    intended only for demonstrations.
+  contact:
+    name: Demo Banking Engineering Team
+  license:
+    name: Apache-2.0
+servers:
+  - url: http://banking-backend:8080
+    description: Docker Compose backend service
+x-wso2-basePath: /family-remittances/1.0.0
+x-wso2-production-endpoints:
+  urls:
+    - http://banking-backend:8080
+  type: http
+x-wso2-sandbox-endpoints:
+  urls:
+    - http://banking-backend:8080
+  type: http
+tags:
+  - name: Remittances
+paths:
+  /v1/remittances/quotes:
+    post:
+      tags:
+        - Remittances
+      operationId: createRemittanceQuote
+      summary: Quote an incoming USD-to-GTQ account-credit remittance
+      security:
+        - OAuth2:
+            - banking.remittances.write
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RemittanceQuoteCreate"
+            example:
+              senderCountry: US
+              sourceAmount:
+                currency: USD
+                amount: "350.00"
+              payoutMethod: ACCOUNT_CREDIT
+              destinationAccountId: ACC-GTQ-001
+      responses:
+        "201":
+          description: Time-limited quote
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RemittanceQuoteResponse"
+        default:
+          $ref: "#/components/responses/ProblemResponse"
+  /v1/remittances:
+    post:
+      tags:
+        - Remittances
+      operationId: createRemittance
+      summary: Register an incoming family remittance
+      security:
+        - OAuth2:
+            - banking.remittances.write
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RemittanceCreate"
+            example:
+              quoteId: RQT-GT-example
+              externalReference: MTO-2026-000091
+              sender:
+                name: Luis Herrera
+                country: US
+                relationship: Hermano
+              beneficiaryCustomerId: CUS-GT-001
+      responses:
+        "200":
+          description: Idempotent replay
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RemittanceResponse"
+        "201":
+          description: Remittance created
+          headers:
+            ETag:
+              $ref: "#/components/headers/ETag"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RemittanceResponse"
+        default:
+          $ref: "#/components/responses/ProblemResponse"
+    get:
+      tags:
+        - Remittances
+      operationId: listRemittances
+      summary: Search remittances
+      security:
+        - OAuth2:
+            - banking.remittances.read
+      parameters:
+        - name: customerId
+          in: query
+          schema:
+            type: string
+        - name: status
+          in: query
+          schema:
+            $ref: "#/components/schemas/RemittanceStatus"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: Matching remittances
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RemittanceCollectionResponse"
+        default:
+          $ref: "#/components/responses/ProblemResponse"
+  /v1/remittances/{remittanceId}:
+    parameters:
+      - $ref: "#/components/parameters/RemittanceId"
+    get:
+      tags:
+        - Remittances
+      operationId: getRemittance
+      summary: Get a remittance
+      security:
+        - OAuth2:
+            - banking.remittances.read
+      responses:
+        "200":
+          description: Remittance
+          headers:
+            ETag:
+              $ref: "#/components/headers/ETag"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RemittanceResponse"
+        default:
+          $ref: "#/components/responses/ProblemResponse"
+    patch:
+      tags:
+        - Remittances
+      operationId: actOnRemittance
+      summary: Pay out, cancel, or reject a remittance
+      security:
+        - OAuth2:
+            - banking.remittances.payout
+      parameters:
+        - $ref: "#/components/parameters/IfMatch"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RemittanceAction"
+            example:
+              action: PAYOUT
+      responses:
+        "200":
+          description: Updated remittance
+          headers:
+            ETag:
+              $ref: "#/components/headers/ETag"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RemittanceResponse"
+        default:
+          $ref: "#/components/responses/ProblemResponse"
+security:
+  - OAuth2: []
+components:
+  headers:
+    ETag:
+      description: Strong entity version used with If-Match.
+      schema:
+        type: string
+        example: '"2"'
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: Unique key for safely retrying a POST. Reusing it with a different body returns 409.
+      schema:
+        type: string
+        minLength: 8
+        maxLength: 128
+        example: 0bbca8d9-cca-transfer-001
+    IfMatch:
+      name: If-Match
+      in: header
+      required: true
+      description: Numeric version returned in the resource ETag, for example `"1"`.
+      schema:
+        type: string
+        example: '"1"'
+    Limit:
+      name: limit
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 200
+        default: 50
+    RemittanceId:
+      name: remittanceId
+      in: path
+      required: true
+      schema:
+        type: string
+        example: RMT-GT-example
+  responses:
+    ProblemResponse:
+      description: Error represented as an RFC 9457-style problem detail
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+  schemas:
+    EnvelopeBase:
+      type: object
+      required:
+        - data
+        - meta
+      properties:
+        data: {}
+        meta:
+          $ref: "#/components/schemas/Metadata"
+    Metadata:
+      type: object
+      required:
+        - correlationId
+      properties:
+        correlationId:
+          type: string
+          format: uuid
+        fapiInteractionId:
+          type: string
+        count:
+          type: integer
+        replayed:
+          type: boolean
+    Money:
+      type: object
+      required:
+        - currency
+        - amount
+      properties:
+        currency:
+          type: string
+          enum:
+            - GTQ
+            - USD
+        amount:
+          type: string
+          pattern: ^\d{1,12}(\.\d{1,2})?$
+          example: "1250.00"
+      description: Decimal amount encoded as a string. The service stores it internally as integer minor units.
+    Problem:
+      type: object
+      required:
+        - type
+        - title
+        - status
+        - detail
+        - code
+        - correlationId
+      properties:
+        type:
+          type: string
+          format: uri
+        title:
+          type: string
+        status:
+          type: integer
+        detail:
+          type: string
+        instance:
+          type: string
+        code:
+          type: string
+        correlationId:
+          type: string
+        errors:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+    Remittance:
+      type: object
+      required:
+        - remittanceId
+        - quoteId
+        - externalReference
+        - sender
+        - beneficiaryCustomerId
+        - destinationAccountId
+        - sourceAmount
+        - payoutAmount
+        - status
+        - version
+      properties:
+        remittanceId:
+          type: string
+        quoteId:
+          type: string
+        externalReference:
+          type: string
+        sender:
+          type: object
+          additionalProperties: true
+        beneficiaryCustomerId:
+          type: string
+        destinationAccountId:
+          type: string
+        sourceAmount:
+          $ref: "#/components/schemas/Money"
+        payoutAmount:
+          $ref: "#/components/schemas/Money"
+        status:
+          $ref: "#/components/schemas/RemittanceStatus"
+        complianceCaseId:
+          type: string
+          nullable: true
+        version:
+          type: integer
+          minimum: 1
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        paidAt:
+          type: string
+          format: date-time
+          nullable: true
+    RemittanceAction:
+      type: object
+      additionalProperties: false
+      required:
+        - action
+      properties:
+        action:
+          type: string
+          enum:
+            - PAYOUT
+            - CANCEL
+            - REJECT
+        reason:
+          type: string
+          maxLength: 240
+    RemittanceCollectionResponse:
+      allOf:
+        - $ref: "#/components/schemas/EnvelopeBase"
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: "#/components/schemas/Remittance"
+    RemittanceCreate:
+      type: object
+      additionalProperties: false
+      required:
+        - quoteId
+        - externalReference
+        - sender
+        - beneficiaryCustomerId
+      properties:
+        quoteId:
+          type: string
+        externalReference:
+          type: string
+          maxLength: 100
+        sender:
+          type: object
+          additionalProperties: false
+          required:
+            - name
+            - country
+          properties:
+            name:
+              type: string
+              maxLength: 160
+            country:
+              type: string
+              pattern: ^[A-Z]{2}$
+            relationship:
+              type: string
+              maxLength: 80
+        beneficiaryCustomerId:
+          type: string
+    RemittanceQuote:
+      type: object
+      required:
+        - quoteId
+        - senderCountry
+        - sourceAmount
+        - fee
+        - exchangeRate
+        - payoutAmount
+        - payoutMethod
+        - destinationAccountId
+        - expiresAt
+      properties:
+        quoteId:
+          type: string
+        senderCountry:
+          type: string
+        sourceAmount:
+          $ref: "#/components/schemas/Money"
+        fee:
+          $ref: "#/components/schemas/Money"
+        exchangeRate:
+          type: string
+          example: "7.7500"
+        payoutAmount:
+          $ref: "#/components/schemas/Money"
+        payoutMethod:
+          type: string
+          enum:
+            - ACCOUNT_CREDIT
+        destinationAccountId:
+          type: string
+        expiresAt:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+    RemittanceQuoteCreate:
+      type: object
+      additionalProperties: false
+      required:
+        - senderCountry
+        - sourceAmount
+        - payoutMethod
+        - destinationAccountId
+      properties:
+        senderCountry:
+          type: string
+          pattern: ^[A-Z]{2}$
+        sourceAmount:
+          $ref: "#/components/schemas/Money"
+        payoutMethod:
+          type: string
+          enum:
+            - ACCOUNT_CREDIT
+        destinationAccountId:
+          type: string
+    RemittanceQuoteResponse:
+      allOf:
+        - $ref: "#/components/schemas/EnvelopeBase"
+        - type: object
+          properties:
+            data:
+              $ref: "#/components/schemas/RemittanceQuote"
+    RemittanceResponse:
+      allOf:
+        - $ref: "#/components/schemas/EnvelopeBase"
+        - type: object
+          properties:
+            data:
+              $ref: "#/components/schemas/Remittance"
+    RemittanceStatus:
+      type: string
+      enum:
+        - PENDING_COMPLIANCE
+        - READY_FOR_PAYOUT
+        - PAID
+        - CANCELLED
+        - REJECTED
+  securitySchemes:
+    OAuth2:
+      type: oauth2
+      description: OAuth2 token validation and scope enforcement are performed by WSO2 API Manager.
+      flows:
+        clientCredentials:
+          tokenUrl: https://localhost:9443/oauth2/token
+          scopes:
+            banking.remittances.read: Read remittances
+            banking.remittances.write: Quote and create remittances
+            banking.remittances.payout: Pay or reject remittances
+x-demo-apim-context: /family-remittances

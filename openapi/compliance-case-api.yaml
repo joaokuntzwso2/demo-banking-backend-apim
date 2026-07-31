@@ -1,0 +1,431 @@
+openapi: 3.0.3
+info:
+  title: Compliance Case API
+  version: 1.0.0
+  description: >-
+    AML and operational compliance case creation, assignment, review, and resolution.
+
+
+    This is a standalone context contract for WSO2 API Manager 4.7. All data and policy values are fictional and
+    intended only for demonstrations.
+  contact:
+    name: Demo Banking Engineering Team
+  license:
+    name: Apache-2.0
+servers:
+  - url: http://banking-backend:8080
+    description: Docker Compose backend service
+x-wso2-basePath: /compliance-cases/1.0.0
+x-wso2-production-endpoints:
+  urls:
+    - http://banking-backend:8080
+  type: http
+x-wso2-sandbox-endpoints:
+  urls:
+    - http://banking-backend:8080
+  type: http
+tags:
+  - name: Compliance
+paths:
+  /v1/compliance/cases:
+    post:
+      tags:
+        - Compliance
+      operationId: createComplianceCase
+      summary: Open a manual compliance case
+      security:
+        - OAuth2:
+            - banking.compliance.write
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ComplianceCaseCreate"
+      responses:
+        "201":
+          description: Case created
+          headers:
+            ETag:
+              $ref: "#/components/headers/ETag"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ComplianceCaseResponse"
+        default:
+          $ref: "#/components/responses/ProblemResponse"
+    get:
+      tags:
+        - Compliance
+      operationId: listComplianceCases
+      summary: Search compliance cases
+      security:
+        - OAuth2:
+            - banking.compliance.read
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum:
+              - OPEN
+              - IN_REVIEW
+              - RESOLVED
+        - name: customerId
+          in: query
+          schema:
+            type: string
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: Matching cases
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ComplianceCaseCollectionResponse"
+        default:
+          $ref: "#/components/responses/ProblemResponse"
+  /v1/compliance/cases/{caseId}:
+    parameters:
+      - $ref: "#/components/parameters/CaseId"
+    get:
+      tags:
+        - Compliance
+      operationId: getComplianceCase
+      summary: Get a compliance case
+      security:
+        - OAuth2:
+            - banking.compliance.read
+      responses:
+        "200":
+          description: Compliance case
+          headers:
+            ETag:
+              $ref: "#/components/headers/ETag"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ComplianceCaseResponse"
+        default:
+          $ref: "#/components/responses/ProblemResponse"
+    patch:
+      tags:
+        - Compliance
+      operationId: actOnComplianceCase
+      summary: Assign, annotate, or resolve a case
+      description: Resolving a linked case atomically advances or rejects the linked transfer/remittance.
+      security:
+        - OAuth2:
+            - banking.compliance.write
+      parameters:
+        - $ref: "#/components/parameters/IfMatch"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ComplianceCaseAction"
+            examples:
+              assign:
+                value:
+                  action: ASSIGN
+                  assignedTo: aml.analyst
+              resolve:
+                value:
+                  action: RESOLVE
+                  disposition: CLEARED
+                  note: Source of funds confirmed
+      responses:
+        "200":
+          description: Updated case
+          headers:
+            ETag:
+              $ref: "#/components/headers/ETag"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ComplianceCaseResponse"
+        default:
+          $ref: "#/components/responses/ProblemResponse"
+security:
+  - OAuth2: []
+components:
+  headers:
+    ETag:
+      description: Strong entity version used with If-Match.
+      schema:
+        type: string
+        example: '"2"'
+  parameters:
+    CaseId:
+      name: caseId
+      in: path
+      required: true
+      schema:
+        type: string
+        example: CMP-GT-example
+    IfMatch:
+      name: If-Match
+      in: header
+      required: true
+      description: Numeric version returned in the resource ETag, for example `"1"`.
+      schema:
+        type: string
+        example: '"1"'
+    Limit:
+      name: limit
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 200
+        default: 50
+  responses:
+    ProblemResponse:
+      description: Error represented as an RFC 9457-style problem detail
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+  schemas:
+    ComplianceCase:
+      type: object
+      required:
+        - caseId
+        - caseType
+        - subjectType
+        - subjectId
+        - customerId
+        - status
+        - priority
+        - reasonCodes
+        - notes
+        - version
+      properties:
+        caseId:
+          type: string
+        caseType:
+          type: string
+        subjectType:
+          type: string
+          enum:
+            - CUSTOMER
+            - TRANSFER
+            - REMITTANCE
+        subjectId:
+          type: string
+        customerId:
+          type: string
+        status:
+          type: string
+          enum:
+            - OPEN
+            - IN_REVIEW
+            - RESOLVED
+        priority:
+          type: string
+          enum:
+            - LOW
+            - MEDIUM
+            - HIGH
+            - CRITICAL
+        reasonCodes:
+          type: array
+          items:
+            type: string
+        amount:
+          $ref: "#/components/schemas/Money"
+        assignedTo:
+          type: string
+          nullable: true
+        notes:
+          type: array
+          items:
+            type: object
+            properties:
+              noteId:
+                type: string
+              text:
+                type: string
+              createdBy:
+                type: string
+              createdAt:
+                type: string
+                format: date-time
+        disposition:
+          type: string
+          enum:
+            - CLEARED
+            - REJECTED
+          nullable: true
+        version:
+          type: integer
+          minimum: 1
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        resolvedAt:
+          type: string
+          format: date-time
+          nullable: true
+    ComplianceCaseAction:
+      type: object
+      additionalProperties: false
+      required:
+        - action
+      properties:
+        action:
+          type: string
+          enum:
+            - ASSIGN
+            - ADD_NOTE
+            - RESOLVE
+        assignedTo:
+          type: string
+          maxLength: 120
+        note:
+          type: string
+          maxLength: 1000
+        disposition:
+          type: string
+          enum:
+            - CLEARED
+            - REJECTED
+    ComplianceCaseCollectionResponse:
+      allOf:
+        - $ref: "#/components/schemas/EnvelopeBase"
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: "#/components/schemas/ComplianceCase"
+    ComplianceCaseCreate:
+      type: object
+      additionalProperties: false
+      required:
+        - caseType
+        - subjectType
+        - subjectId
+        - customerId
+        - priority
+        - reasonCodes
+      properties:
+        caseType:
+          type: string
+          maxLength: 80
+        subjectType:
+          type: string
+          enum:
+            - CUSTOMER
+            - TRANSFER
+            - REMITTANCE
+        subjectId:
+          type: string
+          maxLength: 120
+        customerId:
+          type: string
+        priority:
+          type: string
+          enum:
+            - LOW
+            - MEDIUM
+            - HIGH
+            - CRITICAL
+        reasonCodes:
+          type: array
+          items:
+            type: string
+            maxLength: 80
+        amount:
+          $ref: "#/components/schemas/Money"
+    ComplianceCaseResponse:
+      allOf:
+        - $ref: "#/components/schemas/EnvelopeBase"
+        - type: object
+          properties:
+            data:
+              $ref: "#/components/schemas/ComplianceCase"
+    EnvelopeBase:
+      type: object
+      required:
+        - data
+        - meta
+      properties:
+        data: {}
+        meta:
+          $ref: "#/components/schemas/Metadata"
+    Metadata:
+      type: object
+      required:
+        - correlationId
+      properties:
+        correlationId:
+          type: string
+          format: uuid
+        fapiInteractionId:
+          type: string
+        count:
+          type: integer
+        replayed:
+          type: boolean
+    Money:
+      type: object
+      required:
+        - currency
+        - amount
+      properties:
+        currency:
+          type: string
+          enum:
+            - GTQ
+            - USD
+        amount:
+          type: string
+          pattern: ^\d{1,12}(\.\d{1,2})?$
+          example: "1250.00"
+      description: Decimal amount encoded as a string. The service stores it internally as integer minor units.
+    Problem:
+      type: object
+      required:
+        - type
+        - title
+        - status
+        - detail
+        - code
+        - correlationId
+      properties:
+        type:
+          type: string
+          format: uri
+        title:
+          type: string
+        status:
+          type: integer
+        detail:
+          type: string
+        instance:
+          type: string
+        code:
+          type: string
+        correlationId:
+          type: string
+        errors:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+  securitySchemes:
+    OAuth2:
+      type: oauth2
+      description: OAuth2 token validation and scope enforcement are performed by WSO2 API Manager.
+      flows:
+        clientCredentials:
+          tokenUrl: https://localhost:9443/oauth2/token
+          scopes:
+            banking.compliance.read: Read compliance cases
+            banking.compliance.write: Manage compliance cases
+x-demo-apim-context: /compliance-cases
